@@ -1,9 +1,10 @@
+import hashlib
 import html
+import json
 import re
 from urllib.parse import quote
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
 # ==========================================
@@ -104,6 +105,29 @@ tulis(
     .tbl tr:nth-child(even) td {{ background:#F1F5F9; }}
     .tbl td.num {{ text-align:right; white-space:nowrap; }}
     .tbl td.wide {{ min-width:340px; }}
+
+    .bl-wrap {{ background:#FFFFFF; border:1px solid #94A3B8; border-radius:10px; padding:18px 20px; margin-bottom:18px; }}
+    .bl-row {{ display:grid; grid-template-columns:minmax(160px,300px) 1fr 140px; gap:14px; align-items:center; margin-bottom:12px; }}
+    .bl-row:last-child {{ margin-bottom:0; }}
+    .bl-label {{ color:{TEKS}; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:0.3px; line-height:1.3; }}
+    .bl-track {{ background:#E2E8F0; height:20px; border-radius:10px; overflow:hidden; }}
+    .bl-fill {{ height:100%; border-radius:10px; background:{BIRU}; }}
+    .bl-val {{ color:{TEKS}; font-size:14px; font-weight:800; text-align:right; white-space:nowrap; }}
+    @media (max-width:700px) {{ .bl-row {{ grid-template-columns:1fr 110px; }} .bl-label {{ grid-column:1 / -1; }} }}
+    .cols-wrap {{ background:#FFFFFF; border:1px solid #94A3B8; border-radius:10px; padding:16px 18px 12px; margin-bottom:18px; overflow-x:auto; }}
+    .cols {{ display:flex; align-items:flex-end; gap:12px; min-height:210px; }}
+    .c {{ flex:0 0 58px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }}
+    .c-val {{ color:{TEKS}; font-size:14px; font-weight:800; margin-bottom:4px; }}
+    .c-bar {{ width:100%; background:{BIRU}; border-radius:6px 6px 0 0; }}
+    .c-lab {{ color:{TEKS}; font-size:12px; font-weight:800; margin-top:6px; white-space:nowrap; }}
+    .c-sub {{ color:{TEKS_SEKUNDER}; font-size:11px; font-weight:700; white-space:nowrap; }}
+    .prio {{ display:inline-block; color:#FFFFFF; font-size:11px; font-weight:800; letter-spacing:0.5px;
+        padding:3px 10px; border-radius:12px; margin-left:8px; vertical-align:middle; background:{BIRU}; }}
+    .prio.tinggi {{ background:#B45309; }}
+    .prio.rendah {{ background:#047857; }}
+    .rec .r-lbl {{ color:{BIRU}; font-size:12px; font-weight:800; letter-spacing:0.6px; margin-top:10px; }}
+    .rec .r-txt {{ color:{TEKS}; font-size:14px; font-weight:700; text-transform:uppercase; line-height:1.6; }}
+    .ai-note {{ color:{TEKS_SEKUNDER}; font-size:12px; font-weight:700; text-transform:uppercase; margin:6px 0 14px 4px; }}
 
     .foot {{ color:{TEKS_SEKUNDER}; font-size:12px; font-weight:800; letter-spacing:0.5px;
         text-transform:uppercase; margin-top:30px; border-top:1px solid #94A3B8; padding-top:12px; }}
@@ -324,14 +348,18 @@ def kategori_utama(teks: str) -> str:
 
 
 def olah_data(raw: pd.DataFrame):
-    raw = raw.iloc[:, :6].copy()
-    raw.columns = ["TANGGAL", "NAMA_FRA", "NIP", "KODE_STORE", "NAMA_STORE", "TEMUAN"]
+    raw = raw.copy()
+    if raw.shape[1] < 7:
+        raw["_G"] = ""  # kolom G kosong / belum terbaca
+    raw = raw.iloc[:, :7].copy()
+    raw.columns = ["TANGGAL", "NAMA_FRA", "NIP", "KODE_STORE", "NAMA_STORE", "TEMUAN", "KODE_BU"]
     for c in raw.columns:
         raw[c] = raw[c].fillna("").astype(str).str.strip()
     raw = raw[(raw["NAMA_FRA"] != "") | (raw["NAMA_STORE"] != "")].copy()
     raw["NAMA_FRA"] = raw["NAMA_FRA"].str.upper()
     raw["NAMA_STORE"] = raw["NAMA_STORE"].str.upper()
     raw["KODE_STORE"] = raw["KODE_STORE"].str.upper()
+    raw["KODE_BU"] = raw["KODE_BU"].str.upper().replace("", "TANPA KODE BU")
     raw["TEMUAN"] = raw["TEMUAN"].str.replace(r"\s+", " ", regex=True)
     raw["TGL"] = raw["TANGGAL"].apply(parse_tanggal)
     raw["TANGGAL"] = raw["TANGGAL"].str.upper()
@@ -355,12 +383,12 @@ def olah_data(raw: pd.DataFrame):
                     "VID": r["VID"], "TANGGAL": r["TANGGAL"], "TGL": r["TGL"],
                     "TAHUN": r["TAHUN"], "BULAN": r["BULAN"],
                     "NAMA_FRA": r["NAMA_FRA"], "KODE_STORE": r["KODE_STORE"],
-                    "NAMA_STORE": r["NAMA_STORE"], "NO": no,
+                    "NAMA_STORE": r["NAMA_STORE"], "KODE_BU": r["KODE_BU"], "NO": no,
                     "TEMUAN": teks.upper(), "KATEGORI": kategori_utama(teks),
                 }
             )
     kolom = ["VID", "TANGGAL", "TGL", "TAHUN", "BULAN", "NAMA_FRA", "KODE_STORE",
-             "NAMA_STORE", "NO", "TEMUAN", "KATEGORI"]
+             "NAMA_STORE", "KODE_BU", "NO", "TEMUAN", "KATEGORI"]
     items = pd.DataFrame(baris, columns=kolom)
     jumlah = items.groupby("VID").size()
     raw["JUMLAH_TEMUAN"] = raw["VID"].map(jumlah).fillna(0).astype(int)
@@ -379,6 +407,13 @@ def load_data(sheet_id: str, sheet_name: str):
     if raw.shape[1] < 6:
         raise ValueError("Sheet harus punya minimal 6 kolom (A sampai F).")
     return olah_data(raw)
+
+
+def rahasia(kunci, bawaan=None):
+    try:
+        return st.secrets[kunci]
+    except Exception:
+        return bawaan
 
 
 # ---------- fungsi tampilan ----------
@@ -416,22 +451,39 @@ def tabel_html(data: pd.DataFrame, kolom_angka=(), kolom_lebar=(), tinggi=520):
     )
 
 
-def rapikan(fig, tinggi):
-    fig.update_layout(
-        font=dict(color=TEKS, size=14),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        height=tinggi, margin=dict(l=0, r=10, t=10, b=0),
-        legend=dict(font=dict(color=TEKS, size=13), title_text=""),
-    )
-    fig.update_xaxes(gridcolor="#CBD5E1", linecolor="#64748B",
-                     tickfont=dict(color=TEKS, size=13), title_font=dict(color=TEKS))
-    fig.update_yaxes(gridcolor="#CBD5E1", linecolor="#64748B",
-                     tickfont=dict(color=TEKS, size=13), title_font=dict(color=TEKS))
-    return fig
+def bar_list(data) -> str:
+    """Grafik batang horizontal sederhana. data = [(label, nilai, teks, warna_opsional), ...]"""
+    if not data:
+        return ""
+    maks = max(d[1] for d in data) or 1
+    baris = []
+    for d in data:
+        label, nilai, teks = d[0], d[1], d[2]
+        warna = d[3] if len(d) > 3 else None
+        lebar = max(2.0, nilai / maks * 100) if nilai > 0 else 0
+        gaya = f"width:{lebar:.1f}%" + (f";background:{warna}" if warna else "")
+        baris.append(
+            f'<div class="bl-row"><div class="bl-label">{esc(label)}</div>'
+            f'<div class="bl-track"><div class="bl-fill" style="{gaya}"></div></div>'
+            f'<div class="bl-val">{esc(teks)}</div></div>'
+        )
+    return '<div class="bl-wrap">' + "".join(baris) + "</div>"
 
 
-def tampil(fig):
-    st.plotly_chart(fig, theme=None)
+def kolom_chart(data) -> str:
+    """Grafik batang vertikal sederhana. data = [(label, nilai, sub), ...]"""
+    if not data:
+        return ""
+    maks = max(d[1] for d in data) or 1
+    isi = []
+    for label, nilai, sub in data:
+        tinggi = max(4, int(nilai / maks * 170)) if nilai > 0 else 2
+        isi.append(
+            f'<div class="c"><div class="c-val">{esc(nilai)}</div>'
+            f'<div class="c-bar" style="height:{tinggi}px"></div>'
+            f'<div class="c-lab">{esc(label)}</div><div class="c-sub">{esc(sub)}</div></div>'
+        )
+    return f'<div class="cols-wrap"><div class="cols">{"".join(isi)}</div></div>'
 
 
 def tgl_id(ts) -> str:
@@ -442,9 +494,7 @@ def fmt_persen(x) -> str:
     return "-" if pd.isna(x) else f"{x:.1f}%"
 
 
-WARNA_STATUS = {"ADA TEMUAN": "#DC2626", "TIDAK ADA TEMUAN": "#059669", "BELUM DIISI": "#64748B"}
-PALET = ["#1E3A8A", "#2563EB", "#0891B2", "#059669", "#D97706", "#7C3AED",
-         "#DB2777", "#475569", "#65A30D", "#0EA5E9", "#B45309", "#94A3B8"]
+WARNA_STATUS = {"ADA TEMUAN": "#D97706", "TIDAK ADA TEMUAN": "#059669", "BELUM DIISI": "#64748B"}
 
 # ==========================================
 # 3. AMBIL DATA
@@ -475,6 +525,8 @@ tahun_list = sorted([t for t in visits["TAHUN"].unique() if t != "TIDAK DIKETAHU
 pilih_tahun = st.sidebar.selectbox("TAHUN", ["SEMUA TAHUN"] + tahun_list)
 bulan_list = [b for b in NAMA_BULAN.values() if b in visits["BULAN"].unique()]
 pilih_bulan = st.sidebar.selectbox("BULAN", ["SEMUA BULAN"] + bulan_list)
+bu_list = sorted(visits["KODE_BU"].unique())
+pilih_bu = st.sidebar.selectbox("KODE BU", ["SEMUA BU"] + bu_list)
 fra_list = sorted(visits["NAMA_FRA"].unique())
 pilih_fra = st.sidebar.selectbox("FRA", ["SEMUA FRA"] + fra_list)
 kata = st.sidebar.text_input("CARI KATA (STORE / ISI TEMUAN)")
@@ -484,6 +536,8 @@ if pilih_tahun != "SEMUA TAHUN":
     df = df[df["TAHUN"] == pilih_tahun]
 if pilih_bulan != "SEMUA BULAN":
     df = df[df["BULAN"] == pilih_bulan]
+if pilih_bu != "SEMUA BU":
+    df = df[df["KODE_BU"] == pilih_bu]
 if pilih_fra != "SEMUA FRA":
     df = df[df["NAMA_FRA"] == pilih_fra]
 if kata.strip():
@@ -506,6 +560,7 @@ it = items[items["VID"].isin(df["VID"])].copy()
 total_visit = len(df)
 ada = int((df["STATUS"] == "ADA TEMUAN").sum())
 bersih = int((df["STATUS"] == "TIDAK ADA TEMUAN").sum())
+belum = int((df["STATUS"] == "BELUM DIISI").sum())
 terisi = ada + bersih
 total_temuan = len(it)
 store_dikunjungi = df["KODE_STORE"].nunique()
@@ -524,8 +579,8 @@ tulis(
         <div class="b-title">DASHBOARD ANALISA TEMUAN VISIT FRA</div>
         <div class="b-sub">LAPORAN EKSEKUTIF HASIL KUNJUNGAN LAPANGAN</div>
         <span class="b-chip">{esc(periode)}</span>
+        <span class="b-chip">KODE BU: {esc(pilih_bu)}</span>
         <span class="b-chip">FRA: {esc(pilih_fra)}</span>
-        <span class="b-chip">SUMBER: GOOGLE SHEET (OTOMATIS)</span>
     </div>
     """
 )
@@ -555,7 +610,6 @@ jenis = (
 )
 jenis["PERSEN"] = (jenis["JUMLAH"] / total_temuan * 100).round(1)
 jenis["ARTI"] = jenis["KATEGORI"].map(DESKRIPSI)
-peta_warna = {k: PALET[i % len(PALET)] for i, k in enumerate(jenis["KATEGORI"])}
 top3 = jenis.head(3)
 top = jenis.iloc[0]
 
@@ -573,7 +627,7 @@ def kalimat_ringkasan() -> str:
 
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["RINGKASAN EKSEKUTIF", "JENIS TEMUAN", "REKAP FRA & STORE", "RINCIAN TEMUAN", "KESIMPULAN & REKOMENDASI"]
+    ["RINGKASAN EKSEKUTIF", "JENIS TEMUAN", "REKAP BU, FRA & STORE", "RINCIAN TEMUAN", "KESIMPULAN & REKOMENDASI"]
 )
 
 # ------------------------------------------
@@ -585,44 +639,34 @@ with tab1:
         f"{kalimat_ringkasan()}</div>"
     )
 
-    c1, c2 = st.columns([6, 4])
-    with c1:
-        sec("KOMPOSISI JENIS TEMUAN", "JUMLAH TEMUAN PER JENIS")
-        d = jenis.sort_values("JUMLAH", ascending=True).copy()
-        d["LABEL"] = d.apply(lambda r: f"{r['JUMLAH']} TEMUAN ({r['PERSEN']}%)", axis=1)
-        fig = px.bar(
-            d, x="JUMLAH", y="KATEGORI", orientation="h", text="LABEL",
-            color="KATEGORI", color_discrete_map=peta_warna,
-        )
-        fig.update_traces(textposition="outside", textfont=dict(color=TEKS, size=13))
-        fig.update_layout(xaxis_title="", yaxis_title="", showlegend=False)
-        fig.update_xaxes(range=[0, d["JUMLAH"].max() * 1.45])
-        tampil(rapikan(fig, max(360, 44 * len(d) + 60)))
-    with c2:
-        sec("STATUS SELURUH VISIT", "KOMPOSISI HASIL KUNJUNGAN")
-        st_cnt = df["STATUS"].value_counts().reset_index()
-        st_cnt.columns = ["STATUS", "JUMLAH"]
-        fig = px.pie(
-            st_cnt, names="STATUS", values="JUMLAH", hole=0.55,
-            color="STATUS", color_discrete_map=WARNA_STATUS,
-        )
-        fig.update_traces(textinfo="value+percent", textfont=dict(color="#FFFFFF", size=15))
-        fig.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5))
-        tampil(rapikan(fig, 400))
+    sec("KOMPOSISI JENIS TEMUAN", "JUMLAH TEMUAN PER JENIS DAN PERSENTASE TERHADAP TOTAL")
+    tulis(bar_list([
+        (r.KATEGORI, int(r.JUMLAH), f"{r.JUMLAH} ({r.PERSEN}%)") for r in jenis.itertuples()
+    ]))
 
-    sec("TREN KUNJUNGAN PER HARI", "JUMLAH VISIT PER TANGGAL BERDASARKAN STATUS")
-    harian = df.dropna(subset=["TGL"]).copy()
-    if not harian.empty:
-        harian["TGL_ONLY"] = harian["TGL"].dt.normalize()
-        g = harian.groupby(["TGL_ONLY", "STATUS"]).size().reset_index(name="JUMLAH VISIT")
-        g["HARI"] = g["TGL_ONLY"].apply(lambda t: f"{t.day:02d} {NAMA_BULAN[t.month][:3]}")
-        urut_hari = g[["TGL_ONLY", "HARI"]].drop_duplicates().sort_values("TGL_ONLY")["HARI"].tolist()
-        fig = px.bar(
-            g, x="HARI", y="JUMLAH VISIT", color="STATUS",
-            color_discrete_map=WARNA_STATUS, category_orders={"HARI": urut_hari},
+    sec("STATUS SELURUH VISIT", "JUMLAH VISIT BERDASARKAN HASIL PENCATATAN")
+    status_data = [
+        ("ADA TEMUAN", ada, f"{ada} VISIT", WARNA_STATUS["ADA TEMUAN"]),
+        ("TIDAK ADA TEMUAN", bersih, f"{bersih} VISIT", WARNA_STATUS["TIDAK ADA TEMUAN"]),
+    ]
+    if belum:
+        status_data.append(("BELUM DIISI", belum, f"{belum} VISIT", WARNA_STATUS["BELUM DIISI"]))
+    tulis(bar_list(status_data))
+
+    sec("TREN TEMUAN PER TANGGAL KUNJUNGAN", "ANGKA ATAS = JUMLAH TEMUAN; TEKS DI BAWAH TANGGAL = JUMLAH VISIT")
+    hr = df.dropna(subset=["TGL"]).copy()
+    if not hr.empty:
+        hr["TGL_ONLY"] = hr["TGL"].dt.normalize()
+        g = (
+            hr.groupby("TGL_ONLY")
+            .agg(TEMUAN=("JUMLAH_TEMUAN", "sum"), VISIT=("VID", "size"))
+            .reset_index()
+            .sort_values("TGL_ONLY")
         )
-        fig.update_layout(xaxis_title="")
-        tampil(rapikan(fig, 360))
+        tulis(kolom_chart([
+            (f"{r.TGL_ONLY.day:02d} {NAMA_BULAN[r.TGL_ONLY.month][:3]}", int(r.TEMUAN), f"{int(r.VISIT)} VISIT")
+            for r in g.itertuples()
+        ]))
 
 # ------------------------------------------
 # TAB 2: JENIS TEMUAN
@@ -642,15 +686,6 @@ with tab2:
     tulis(tabel_html(tabel, kolom_angka=("NO", "JUMLAH TEMUAN", "% DARI TOTAL", "JUMLAH STORE"),
                      kolom_lebar=("PENJELASAN",), tinggi=560))
 
-    sec("SEBARAN JENIS TEMUAN PER FRA", "ANGKA = JUMLAH TEMUAN")
-    pivot = it.pivot_table(index="NAMA_FRA", columns="KATEGORI", values="NO",
-                           aggfunc="count", fill_value=0)
-    pivot = pivot[[k for k in jenis["KATEGORI"] if k in pivot.columns]]
-    fig = px.imshow(pivot, text_auto=True, aspect="auto", color_continuous_scale="Blues")
-    fig.update_layout(xaxis_title="", yaxis_title="", coloraxis_showscale=False)
-    fig.update_xaxes(tickangle=-35)
-    tampil(rapikan(fig, max(340, 36 * len(pivot) + 200)))
-
     sec("URAIAN TEMUAN PER JENIS", "PILIH JENIS UNTUK MELIHAT SELURUH URAIAN TEMUANNYA")
     pilih = st.selectbox("PILIH JENIS TEMUAN", jenis["KATEGORI"].tolist())
     sub = it[it["KATEGORI"] == pilih]
@@ -666,6 +701,7 @@ with tab2:
     tabel = pd.DataFrame(
         {
             "TANGGAL": uraian["TANGGAL"],
+            "KODE BU": uraian["KODE_BU"],
             "FRA": uraian["NAMA_FRA"],
             "STORE": uraian["KODE_STORE"] + " - " + uraian["NAMA_STORE"],
             "URAIAN TEMUAN": uraian["TEMUAN"],
@@ -674,20 +710,42 @@ with tab2:
     tulis(tabel_html(tabel, kolom_lebar=("URAIAN TEMUAN",)))
 
 # ------------------------------------------
-# TAB 3: REKAP FRA & STORE
+# TAB 3: REKAP BU, FRA & STORE
 # ------------------------------------------
 with tab3:
-    sec("REKAPITULASI PER FRA", "JUMLAH TEMUAN PER FRA, DIRINCI PER JENIS")
-    fra_jenis = it.groupby(["NAMA_FRA", "KATEGORI"]).size().reset_index(name="JUMLAH TEMUAN")
-    urut_fra = it.groupby("NAMA_FRA").size().sort_values(ascending=True).index.tolist()
-    fig = px.bar(
-        fra_jenis, x="JUMLAH TEMUAN", y="NAMA_FRA", color="KATEGORI", orientation="h",
-        color_discrete_map=peta_warna, category_orders={"NAMA_FRA": urut_fra},
+    sec("REKAPITULASI PER KODE BU", "JUMLAH TEMUAN DAN VISIT PER KODE BU")
+    bu_tab = (
+        df.groupby("KODE_BU")
+        .agg(
+            VISIT=("VID", "size"),
+            ADA=("STATUS", lambda s: int((s == "ADA TEMUAN").sum())),
+            BERSIH=("STATUS", lambda s: int((s == "TIDAK ADA TEMUAN").sum())),
+            TEMUAN=("JUMLAH_TEMUAN", "sum"),
+        )
+        .reset_index()
+        .sort_values(["TEMUAN", "KODE_BU"], ascending=[False, True])
     )
-    fig.update_layout(xaxis_title="", yaxis_title="",
-                      legend=dict(orientation="h", yanchor="top", y=-0.1))
-    tampil(rapikan(fig, max(360, 36 * len(urut_fra) + 190)))
+    pb = bu_tab["ADA"] + bu_tab["BERSIH"]
+    bu_tab["PERSEN"] = (bu_tab["ADA"] / pb.where(pb > 0) * 100).round(1)
+    tulis(bar_list([(r.KODE_BU, int(r.TEMUAN), f"{r.TEMUAN} TEMUAN") for r in bu_tab.itertuples()]))
+    tabel = pd.DataFrame(
+        {
+            "KODE BU": bu_tab["KODE_BU"],
+            "TOTAL VISIT": bu_tab["VISIT"],
+            "VISIT DENGAN TEMUAN": bu_tab["ADA"],
+            "VISIT TANPA TEMUAN": bu_tab["BERSIH"],
+            "TOTAL TEMUAN": bu_tab["TEMUAN"],
+            "% VISIT DENGAN TEMUAN": bu_tab["PERSEN"].map(fmt_persen),
+        }
+    )
+    tulis(tabel_html(
+        tabel,
+        kolom_angka=("TOTAL VISIT", "VISIT DENGAN TEMUAN", "VISIT TANPA TEMUAN",
+                     "TOTAL TEMUAN", "% VISIT DENGAN TEMUAN"),
+        tinggi=420,
+    ))
 
+    sec("REKAPITULASI PER FRA", "JUMLAH TEMUAN PER FRA")
     fra_tab = (
         df.groupby("NAMA_FRA")
         .agg(
@@ -697,10 +755,13 @@ with tab3:
             TEMUAN=("JUMLAH_TEMUAN", "sum"),
         )
         .reset_index()
-        .sort_values("NAMA_FRA")
+        .sort_values(["TEMUAN", "NAMA_FRA"], ascending=[False, True])
     )
-    penyebut = fra_tab["ADA"] + fra_tab["BERSIH"]
-    fra_tab["PERSEN"] = (fra_tab["ADA"] / penyebut.where(penyebut > 0) * 100).round(1)
+    pf = fra_tab["ADA"] + fra_tab["BERSIH"]
+    fra_tab["PERSEN"] = (fra_tab["ADA"] / pf.where(pf > 0) * 100).round(1)
+    dominan = it.groupby("NAMA_FRA")["KATEGORI"].agg(lambda s: s.value_counts().index[0])
+    fra_tab["DOMINAN"] = fra_tab["NAMA_FRA"].map(dominan).fillna("-")
+    tulis(bar_list([(r.NAMA_FRA, int(r.TEMUAN), f"{r.TEMUAN} TEMUAN") for r in fra_tab.itertuples()]))
     tabel = pd.DataFrame(
         {
             "FRA": fra_tab["NAMA_FRA"],
@@ -709,17 +770,19 @@ with tab3:
             "VISIT TANPA TEMUAN": fra_tab["BERSIH"],
             "TOTAL TEMUAN": fra_tab["TEMUAN"],
             "% VISIT DENGAN TEMUAN": fra_tab["PERSEN"].map(fmt_persen),
+            "JENIS TEMUAN DOMINAN": fra_tab["DOMINAN"],
         }
     )
     tulis(tabel_html(
         tabel,
         kolom_angka=("TOTAL VISIT", "VISIT DENGAN TEMUAN", "VISIT TANPA TEMUAN",
                      "TOTAL TEMUAN", "% VISIT DENGAN TEMUAN"),
+        tinggi=480,
     ))
 
     sec("REKAPITULASI PER STORE", "JUMLAH TEMUAN PER STORE PADA PERIODE YANG DIPILIH")
     store = (
-        it.groupby(["KODE_STORE", "NAMA_STORE"])
+        it.groupby(["KODE_STORE", "NAMA_STORE", "KODE_BU"])
         .agg(JUMLAH=("NO", "size"), JENIS=("KATEGORI", "nunique"),
              UTAMA=("KATEGORI", lambda s: s.value_counts().index[0]))
         .reset_index()
@@ -729,6 +792,7 @@ with tab3:
         {
             "KODE STORE": store["KODE_STORE"],
             "NAMA STORE": store["NAMA_STORE"],
+            "KODE BU": store["KODE_BU"],
             "JUMLAH TEMUAN": store["JUMLAH"],
             "JUMLAH JENIS": store["JENIS"],
             "JENIS TEMUAN DOMINAN": store["UTAMA"],
@@ -752,6 +816,7 @@ with tab4:
         r = df[df["VID"] == vid].iloc[0]
         tulis(
             f'<div class="insight"><div class="i-title">{esc(r["KODE_STORE"])} - {esc(r["NAMA_STORE"])}</div>'
+            f'<div class="i-line">KODE BU: {esc(r["KODE_BU"])}</div>'
             f'<div class="i-line">FRA: {esc(r["NAMA_FRA"])}</div>'
             f'<div class="i-line">TANGGAL VISIT: {esc(r["TANGGAL"])}</div>'
             f'<div class="i-line">JUMLAH TEMUAN: {r["JUMLAH_TEMUAN"]}</div></div>'
@@ -762,15 +827,14 @@ with tab4:
         )
         tulis(tabel_html(tabel, kolom_angka=("NO",), kolom_lebar=("URAIAN TEMUAN",), tinggi=600))
     else:
-        pilih_jenis = st.multiselect(
-            "FILTER JENIS TEMUAN", jenis["KATEGORI"].tolist(), default=jenis["KATEGORI"].tolist()
-        )
-        semua = it[it["KATEGORI"].isin(pilih_jenis)].sort_values(
-            ["TGL", "VID", "NO"], ascending=[False, True, True]
-        )
+        pilihan_jenis = ["SEMUA JENIS TEMUAN"] + jenis["KATEGORI"].tolist()
+        pilih_jenis = st.selectbox("JENIS TEMUAN", pilihan_jenis)
+        semua = it if pilih_jenis == "SEMUA JENIS TEMUAN" else it[it["KATEGORI"] == pilih_jenis]
+        semua = semua.sort_values(["TGL", "VID", "NO"], ascending=[False, True, True])
         tabel_penuh = pd.DataFrame(
             {
                 "TANGGAL": semua["TANGGAL"],
+                "KODE BU": semua["KODE_BU"],
                 "FRA": semua["NAMA_FRA"],
                 "STORE": semua["KODE_STORE"] + " - " + semua["NAMA_STORE"],
                 "JENIS TEMUAN": semua["KATEGORI"],
@@ -787,24 +851,166 @@ with tab4:
         )
 
 # ------------------------------------------
-# TAB 5: KESIMPULAN & REKOMENDASI
+# TAB 5: KESIMPULAN & REKOMENDASI (AI)
 # ------------------------------------------
-with tab5:
-    sec("KESIMPULAN", "RINGKASAN HASIL ANALISA BERDASARKAN FILTER YANG DIPILIH")
-    tulis(f'<div class="insight">{kalimat_ringkasan()}</div>')
+SISTEM_AI = (
+    "ANDA ADALAH ANALIS PENGENDALIAN INTERNAL SENIOR DI PERUSAHAAN RITEL MULTI-BU. "
+    "TUGAS ANDA MENYUSUN KESIMPULAN EKSEKUTIF DAN REKOMENDASI PERBAIKAN PROSES DARI HASIL VISIT FRA KE STORE. "
+    "ATURAN: (1) TULIS DALAM BAHASA INDONESIA FORMAL, SELURUHNYA HURUF KAPITAL. "
+    "(2) NETRAL DAN PROFESIONAL: JANGAN MENYALAHKAN, MENYEBUT, ATAU MEMBANDINGKAN INDIVIDU, FRA, ATAU STORE TERTENTU; "
+    "FOKUS PADA PROSES, SISTEM, DAN KONTROL. "
+    "(3) REKOMENDASI HARUS SPESIFIK DAN BERBEDA SATU SAMA LAIN, DISUSUN DARI POLA PADA DATA DAN CONTOH URAIAN YANG DIBERIKAN, "
+    "BUKAN SARAN UMUM. SEBUTKAN ANGKA PENDUKUNGNYA. HINDARI KALIMAT YANG BERULANG ATAU KLISE. "
+    "(4) JANGAN MENGARANG FAKTA ATAU ANGKA DI LUAR DATA. "
+    "(5) KELUARKAN HANYA JSON VALID TANPA TEKS LAIN DENGAN BENTUK: "
+    '{"kesimpulan": ["...", "..."], '
+    '"rekomendasi": [{"judul": "...", "prioritas": "TINGGI|SEDANG|RENDAH", "dasar_temuan": "...", '
+    '"langkah": ["...", "..."], "indikator": "..."}]}. '
+    "KESIMPULAN: 3 SAMPAI 5 KALIMAT. REKOMENDASI: 3 SAMPAI 5 BUTIR, URUT DARI PRIORITAS TERTINGGI; "
+    "SETIAP REKOMENDASI MEMILIKI 3 SAMPAI 4 LANGKAH KONKRET DAN SATU INDIKATOR KEBERHASILAN YANG TERUKUR."
+)
 
-    sec("REKOMENDASI PERBAIKAN PROSES", "DISUSUN DARI POLA TEMUAN; SESUAIKAN DENGAN KEBIJAKAN DAN SOP PERUSAHAAN")
+
+def susun_prompt() -> str:
+    contoh = {}
+    for kat in jenis["KATEGORI"].head(6):
+        teks = it[it["KATEGORI"] == kat]["TEMUAN"].drop_duplicates().head(6)
+        contoh[kat] = [t[:220] for t in teks]
+    per_bu = (
+        df.groupby("KODE_BU")
+        .agg(visit=("VID", "size"), temuan=("JUMLAH_TEMUAN", "sum"))
+        .reset_index()
+        .to_dict("records")
+    )
+    data = {
+        "periode": periode.replace("PERIODE: ", ""),
+        "filter_kode_bu": pilih_bu,
+        "total_visit": total_visit,
+        "visit_dengan_temuan": ada,
+        "visit_tanpa_temuan": bersih,
+        "total_temuan": total_temuan,
+        "persentase_visit_dengan_temuan": round(persen_visit, 1),
+        "jumlah_store_dikunjungi": store_dikunjungi,
+        "jumlah_store_memiliki_temuan": store_ada_temuan,
+        "jenis_temuan": [
+            {"jenis": r.KATEGORI, "jumlah": int(r.JUMLAH), "persen": float(r.PERSEN), "jumlah_store": int(r.STORE_N)}
+            for r in jenis.itertuples()
+        ],
+        "rekap_per_kode_bu": per_bu,
+        "contoh_uraian_per_jenis": contoh,
+    }
+    return "DATA RINGKAS HASIL VISIT FRA (JSON):\n" + json.dumps(data, ensure_ascii=False, indent=1)
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def minta_ai(prompt: str, model: str) -> str:
+    import anthropic
+
+    klien = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+    jawab = klien.messages.create(
+        model=model,
+        max_tokens=3000,
+        system=SISTEM_AI,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return "".join(b.text for b in jawab.content if getattr(b, "type", "") == "text")
+
+
+def baca_json_ai(teks: str):
+    t = teks.strip()
+    t = re.sub(r"^```(?:json)?\s*|\s*```$", "", t)
+    a, b = t.find("{"), t.rfind("}")
+    if a < 0 or b <= a:
+        return None
+    try:
+        d = json.loads(t[a:b + 1])
+    except Exception:
+        return None
+    if not isinstance(d, dict) or not d.get("kesimpulan") or not d.get("rekomendasi"):
+        return None
+    return d
+
+
+def tampil_ai(d: dict):
+    kal = d.get("kesimpulan", [])
+    if isinstance(kal, str):
+        kal = [kal]
+    baris = "".join(f'<div class="i-line">{i}. {esc(str(k).upper())}</div>' for i, k in enumerate(kal, 1))
+    tulis(f'<div class="insight"><div class="i-title">KESIMPULAN</div>{baris}</div>')
+
+    sec("REKOMENDASI PERBAIKAN PROSES", "DISUSUN AI DARI POLA TEMUAN; VALIDASI DAN SESUAIKAN DENGAN SOP SEBELUM DIGUNAKAN")
+    for no, rk in enumerate(d.get("rekomendasi", []), 1):
+        if not isinstance(rk, dict):
+            continue
+        prio = str(rk.get("prioritas", "SEDANG")).upper().strip()
+        kelas = {"TINGGI": "tinggi", "RENDAH": "rendah"}.get(prio, "")
+        langkah = rk.get("langkah", [])
+        if isinstance(langkah, str):
+            langkah = [langkah]
+        poin = "".join(f"<li>{esc(str(p).upper())}</li>" for p in langkah)
+        tulis(
+            f"""
+            <div class="rec">
+                <div class="r-title">{no}. {esc(str(rk.get("judul", "")).upper())}
+                    <span class="prio {kelas}">PRIORITAS {esc(prio)}</span></div>
+                <div class="r-lbl">DASAR TEMUAN</div>
+                <div class="r-txt">{esc(str(rk.get("dasar_temuan", "")).upper())}</div>
+                <div class="r-lbl">LANGKAH PERBAIKAN</div>
+                <ul>{poin}</ul>
+                <div class="r-lbl">INDIKATOR KEBERHASILAN</div>
+                <div class="r-txt">{esc(str(rk.get("indikator", "")).upper())}</div>
+            </div>
+            """
+        )
+
+
+def tampil_standar():
+    sec("REKOMENDASI PERBAIKAN PROSES (STANDAR)", "DISUSUN OTOMATIS DARI TIGA JENIS TEMUAN TERATAS; SESUAIKAN DENGAN SOP PERUSAHAAN")
     for no, r in enumerate(top3.itertuples(), 1):
         poin = "".join(f"<li>{esc(p)}</li>" for p in REKOMENDASI.get(r.KATEGORI, REKOMENDASI[LAINNYA]))
         tulis(
             f"""
             <div class="rec">
                 <div class="r-title">{no}. {esc(r.KATEGORI)}</div>
-                <div class="r-meta">{r.JUMLAH} TEMUAN | {r.STORE_N} STORE | {r.PERSEN}% DARI TOTAL</div>
-                <div class="r-desc">{esc(DESKRIPSI[r.KATEGORI])}</div>
+                <div class="r-lbl">{r.JUMLAH} TEMUAN | {r.STORE_N} STORE | {r.PERSEN}% DARI TOTAL</div>
+                <div class="r-txt">{esc(DESKRIPSI[r.KATEGORI])}</div>
                 <ul>{poin}</ul>
             </div>
             """
         )
+
+
+with tab5:
+    sec("KESIMPULAN & REKOMENDASI", "BERDASARKAN FILTER YANG DIPILIH DI PANEL FILTER")
+    prompt = susun_prompt()
+    kunci_data = hashlib.md5(prompt.encode("utf-8")).hexdigest()
+    model_ai = rahasia("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+
+    if rahasia("ANTHROPIC_API_KEY"):
+        if st.button("BUAT KESIMPULAN & REKOMENDASI DENGAN AI"):
+            with st.spinner("AI SEDANG MENYUSUN ANALISA..."):
+                try:
+                    hasil = baca_json_ai(minta_ai(prompt, model_ai))
+                    if hasil is None:
+                        st.error("FORMAT JAWABAN AI TIDAK DAPAT DIBACA. SILAKAN COBA LAGI.")
+                    else:
+                        st.session_state["hasil_ai"] = (kunci_data, hasil)
+                except Exception as e:
+                    st.error(f"AI TIDAK DAPAT DIAKSES: {e}")
+        simpan = st.session_state.get("hasil_ai")
+        tulis('<div class="ai-note">AI HANYA MENERIMA DATA RINGKAS (JUMLAH PER JENIS DAN CONTOH URAIAN). '
+              "NAMA FRA, NAMA STORE, DAN NIP TIDAK DIKIRIM.</div>")
+        if simpan and simpan[0] == kunci_data:
+            tampil_ai(simpan[1])
+        else:
+            tulis(f'<div class="insight"><div class="i-title">RINGKASAN OTOMATIS</div>{kalimat_ringkasan()}</div>')
+            tulis('<div class="ai-note">TEKAN TOMBOL DI ATAS UNTUK MEMBUAT KESIMPULAN DAN REKOMENDASI '
+                  "YANG DISUSUN AI SESUAI DATA PADA FILTER INI.</div>")
+            tampil_standar()
+    else:
+        tulis('<div class="ai-note">FITUR AI BELUM AKTIF. TAMBAHKAN ANTHROPIC_API_KEY PADA SECRETS STREAMLIT '
+              "UNTUK MENGAKTIFKANNYA. SEMENTARA ITU DITAMPILKAN RINGKASAN OTOMATIS.</div>")
+        tulis(f'<div class="insight"><div class="i-title">RINGKASAN OTOMATIS</div>{kalimat_ringkasan()}</div>')
+        tampil_standar()
 
 tulis('<div class="foot">SUMBER DATA: GOOGLE SHEET TEMUAN | DIPERBARUI OTOMATIS SETIAP 5 MENIT</div>')
