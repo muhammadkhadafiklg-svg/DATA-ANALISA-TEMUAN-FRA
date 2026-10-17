@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 # ==========================================
 # 1. KONFIGURASI & TEMA DASHBOARD
@@ -22,7 +21,7 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 # ==========================================
-# 2. PENGAMBILAN DATA (DIRECT BACA KOLOM BU)
+# 2. PENGAMBILAN DATA
 # ==========================================
 SHEET_ID = "1RfrC_LUAZbKrGEN15KPkBXhUz8ei2jyqGdUaKPS4WMY"
 url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -31,14 +30,11 @@ url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 def load_data():
     df = pd.read_csv(url)
     
-    # ⚠️ PENTING: SESUAIKAN ANGKA INDEX DI BAWAH DENGAN URUTAN KOLOM EXCEL ANDA
-    # A = 0, B = 1, C = 2, D = 3, E = 4, F = 5, G = 6, dst.
-    # Saat ini saya asumsikan BU ada di Kolom C (Index 2). Jika beda, ubah angka 2 tersebut.
-    
+    # Membaca Data (Pastikan index kolom Excel sesuai)
     df_clean = pd.DataFrame({
         'TANGGAL': df.iloc[:, 0].astype(str),
         'FRA': df.iloc[:, 1].astype(str).str.upper().str.strip(),
-        'BISNIS UNIT': df.iloc[:, 2].astype(str).str.upper().str.strip(), # <--- UBAH ANGKA 2 JIKA KOLOM BU BUKAN DI C
+        'BISNIS UNIT': df.iloc[:, 2].astype(str).str.upper().str.strip(),
         'KODE STORE': df.iloc[:, 3].astype(str).str.upper().str.strip(),
         'NAMA STORE': df.iloc[:, 4].astype(str).str.upper().str.strip(),
         'DETAIL TEMUAN': df.iloc[:, 5].astype(str).str.upper().str.strip()
@@ -50,7 +46,7 @@ def load_data():
 try:
     df_mentah = load_data()
 except Exception as e:
-    st.error("Gagal membaca data dari Google Sheets. Pastikan link dapat diakses publik dan index kolom sudah benar.")
+    st.error("Gagal membaca data dari Google Sheets. Pastikan link dapat diakses publik.")
     st.stop()
 
 # ==========================================
@@ -82,8 +78,6 @@ st.sidebar.markdown("### 🎛️ Panel Filter Data")
 urutan_bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 bulan_tersedia = [b for b in urutan_bulan if b in df_mentah['Bulan'].unique()]
 tahun_tersedia = sorted(df_mentah[df_mentah['Tahun'] != 'Unknown']['Tahun'].unique(), reverse=True)
-
-# Membaca daftar BU murni dari Google Sheet
 list_bu = sorted([b for b in df_mentah['BISNIS UNIT'].dropna().unique() if b and b != 'NONE'])
 list_fra = sorted([f for f in df_mentah['FRA'].dropna().unique() if f and f != 'NONE'])
 
@@ -140,27 +134,4 @@ st.markdown(f'''
 ''', unsafe_allow_html=True)
 
 if total_temuan == 0:
-    st.success("🎉 Luar biasa! Tidak ada data temuan pada Bisnis Unit / Filter yang Anda pilih. Operasional berjalan bersih.")
-    st.stop()
-
-# ==========================================
-# 6. TAB NAVIGASI ANALISA
-# ==========================================
-tab1, tab2, tab3 = st.tabs(["📊 Ringkasan Eksekutif", "🎯 Analisa Mendalam (BU, Area & Toko)", "💡 Kesimpulan & Action Plan"])
-
-# ------------------------------------------
-# TAB 1: RINGKASAN EKSEKUTIF
-# ------------------------------------------
-with tab1:
-    col_chart1, col_chart2 = st.columns([6, 4])
-    
-    with col_chart1:
-        st.markdown("#### Distribusi Kategori Temuan Utama")
-        top_kategori = df_temuan['Kategori Temuan'].value_counts().reset_index()
-        top_kategori.columns = ['Kategori', 'Jumlah']
-        top_kategori['Persentase'] = (top_kategori['Jumlah'] / total_temuan * 100).round(1)
-        
-        fig_bar = px.bar(
-            top_kategori.sort_values('Jumlah', ascending=True), 
-            x='Persentase', y='Kategori', orientation='h',
-            text=top
+    st.success("🎉 Luar biasa! Tidak ada data temuan pada Bisnis Unit / Filter yang Anda pilih. Operasional berjalan bersih
