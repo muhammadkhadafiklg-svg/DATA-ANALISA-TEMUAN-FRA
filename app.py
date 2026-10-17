@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # ==========================================
 # 1. KONFIGURASI & TEMA DASHBOARD
@@ -21,7 +22,7 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 # ==========================================
-# 2. PENGAMBILAN & PEMBELAHAN DATA (BU EXTRACTOR)
+# 2. PENGAMBILAN DATA (DIRECT BACA KOLOM BU)
 # ==========================================
 SHEET_ID = "1RfrC_LUAZbKrGEN15KPkBXhUz8ei2jyqGdUaKPS4WMY"
 url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -30,29 +31,26 @@ url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 def load_data():
     df = pd.read_csv(url)
     
-    # Membaca kolom Kode Store mentah yang tergabung (misal: F620FBI)
-    raw_kode = df.iloc[:, 3].astype(str).str.upper().str.strip()
-    
-    # ALGORITMA PEMISAH KODE TOKO & BISNIS UNIT
-    # 4 karakter pertama = Kode Toko, Sisanya = Bisnis Unit
-    kode_toko_bersih = raw_kode.apply(lambda x: x[:4] if len(x) >= 4 else x)
-    bisnis_unit = raw_kode.apply(lambda x: x[4:] if len(x) > 4 else 'BU LAINNYA')
+    # ⚠️ PENTING: SESUAIKAN ANGKA INDEX DI BAWAH DENGAN URUTAN KOLOM EXCEL ANDA
+    # A = 0, B = 1, C = 2, D = 3, E = 4, F = 5, G = 6, dst.
+    # Saat ini saya asumsikan BU ada di Kolom C (Index 2). Jika beda, ubah angka 2 tersebut.
     
     df_clean = pd.DataFrame({
         'TANGGAL': df.iloc[:, 0].astype(str),
-        'BISNIS UNIT': bisnis_unit,
         'FRA': df.iloc[:, 1].astype(str).str.upper().str.strip(),
-        'KODE STORE': kode_toko_bersih,
-        'NAMA STORE': df.iloc[:, 4].astype(str).str.upper(),
+        'BISNIS UNIT': df.iloc[:, 2].astype(str).str.upper().str.strip(), # <--- UBAH ANGKA 2 JIKA KOLOM BU BUKAN DI C
+        'KODE STORE': df.iloc[:, 3].astype(str).str.upper().str.strip(),
+        'NAMA STORE': df.iloc[:, 4].astype(str).str.upper().str.strip(),
         'DETAIL TEMUAN': df.iloc[:, 5].astype(str).str.upper().str.strip()
     })
+    
     df_clean = df_clean.replace(['NAN', 'NAN ', ''], None)
     return df_clean
 
 try:
     df_mentah = load_data()
 except Exception as e:
-    st.error("Gagal membaca data dari Google Sheets. Pastikan link dapat diakses publik.")
+    st.error("Gagal membaca data dari Google Sheets. Pastikan link dapat diakses publik dan index kolom sudah benar.")
     st.stop()
 
 # ==========================================
@@ -84,7 +82,9 @@ st.sidebar.markdown("### 🎛️ Panel Filter Data")
 urutan_bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 bulan_tersedia = [b for b in urutan_bulan if b in df_mentah['Bulan'].unique()]
 tahun_tersedia = sorted(df_mentah[df_mentah['Tahun'] != 'Unknown']['Tahun'].unique(), reverse=True)
-list_bu = sorted([b for b in df_mentah['BISNIS UNIT'].dropna().unique() if b != 'BU LAINNYA'])
+
+# Membaca daftar BU murni dari Google Sheet
+list_bu = sorted([b for b in df_mentah['BISNIS UNIT'].dropna().unique() if b and b != 'NONE'])
 list_fra = sorted([f for f in df_mentah['FRA'].dropna().unique() if f and f != 'NONE'])
 
 pilih_tahun = st.sidebar.selectbox("📅 Pilih Tahun", ["Semua Tahun"] + tahun_tersedia)
@@ -94,9 +94,6 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("**Filter Hirarki:**")
 pilih_bu = st.sidebar.selectbox("🏢 Filter Bisnis Unit", ["Semua Bisnis Unit"] + list_bu)
 pilih_fra = st.sidebar.selectbox("🧑‍💼 Filter Area (FRA)", ["Semua Area"] + list_fra)
-
-st.sidebar.markdown("---")
-st.sidebar.info("💡 **Tips:** Filter berdasarkan **Bisnis Unit** untuk melihat rapor performa per divisi (misal: hanya FBI atau HCIR).")
 
 # Terapkan Filter
 df_filter = df_mentah.copy()
@@ -166,109 +163,4 @@ with tab1:
         fig_bar = px.bar(
             top_kategori.sort_values('Jumlah', ascending=True), 
             x='Persentase', y='Kategori', orientation='h',
-            text=top_kategori.sort_values('Jumlah', ascending=True).apply(lambda x: f"{x['Jumlah']} kasus ({x['Persentase']}%)", axis=1),
-            color_discrete_sequence=['#2563eb']
-        )
-        fig_bar.update_traces(textposition='outside')
-        fig_bar.update_layout(
-            xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', 
-            xaxis=dict(showgrid=True, gridcolor='#f1f5f9', range=[0, top_kategori['Persentase'].max() * 1.3]),
-            margin=dict(l=0, r=0, t=10, b=0), height=380
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
-
-    with col_chart2:
-        st.markdown("#### Proporsi Kunjungan Bersih vs Bermasalah")
-        kunjungan_bersih = total_visit - total_temuan if (total_visit - total_temuan) > 0 else 0
-        fig_donut = px.pie(
-            names=['Kunjungan Bersih', 'Ada Temuan'], values=[kunjungan_bersih, total_temuan],
-            hole=0.6, color_discrete_sequence=['#10B981', '#E11D48']
-        )
-        fig_donut.update_traces(textinfo='percent', textfont_size=14, hoverinfo='label+value')
-        fig_donut.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=380, showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5))
-        st.plotly_chart(fig_donut, use_container_width=True)
-
-# ------------------------------------------
-# TAB 2: ANALISA MENDALAM (BU, FRA, TOKO)
-# ------------------------------------------
-with tab2:
-    st.markdown("#### 🚨 Rapor Beban Temuan Berdasarkan Bisnis Unit")
-    bu_counts = df_temuan['BISNIS UNIT'].value_counts().reset_index()
-    bu_counts.columns = ['Bisnis Unit', 'Total Temuan']
-    
-    fig_bu = px.bar(bu_counts, x='Bisnis Unit', y='Total Temuan', text='Total Temuan', color='Total Temuan', color_continuous_scale='Blues')
-    fig_bu.update_traces(textposition='outside')
-    fig_bu.update_layout(xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', showlegend=False, coloraxis_showscale=False, height=300)
-    st.plotly_chart(fig_bu, use_container_width=True)
-    
-    st.markdown("---")
-    col_deep1, col_deep2 = st.columns(2)
-    
-    with col_deep1:
-        st.markdown("#### 🚨 Kinerja Area (Top FRA Bermasalah)")
-        fra_counts = df_temuan['FRA'].value_counts().reset_index().head(10)
-        fra_counts.columns = ['Nama FRA', 'Total Temuan']
-        
-        fig_fra = px.bar(fra_counts, x='Nama FRA', y='Total Temuan', text='Total Temuan', color='Total Temuan', color_continuous_scale='Reds')
-        fig_fra.update_traces(textposition='outside')
-        fig_fra.update_layout(xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', showlegend=False, coloraxis_showscale=False, height=350)
-        st.plotly_chart(fig_fra, use_container_width=True)
-
-    with col_deep2:
-        st.markdown("#### 🏪 Top 10 Toko Kritis")
-        store_counts = df_temuan.groupby(['BISNIS UNIT', 'KODE STORE', 'NAMA STORE']).size().reset_index(name='Jumlah Temuan')
-        store_counts = store_counts.sort_values('Jumlah Temuan', ascending=False).head(10)
-        st.dataframe(
-            store_counts,
-            column_config={
-                "BISNIS UNIT": st.column_config.TextColumn("BU"),
-                "KODE STORE": st.column_config.TextColumn("Kode"),
-                "NAMA STORE": st.column_config.TextColumn("Nama Toko"),
-                "Jumlah Temuan": st.column_config.ProgressColumn("Frekuensi", format="%f", min_value=0, max_value=int(store_counts['Jumlah Temuan'].max()))
-            },
-            hide_index=True, use_container_width=True
-        )
-
-# ------------------------------------------
-# TAB 3: KESIMPULAN & ACTION PLAN (AI BASE)
-# ------------------------------------------
-with tab3:
-    st.markdown("#### 💡 Intelijen Bisnis: Insight & Rekomendasi Tindakan")
-    
-    top_masalah = top_kategori.iloc[0]['Kategori']
-    persen_masalah = top_kategori.iloc[0]['Persentase']
-    top_fra = fra_counts.iloc[0]['Nama FRA'] if not fra_counts.empty else "Tidak diketahui"
-    top_bu = bu_counts.iloc[0]['Bisnis Unit'] if not bu_counts.empty else "Tidak diketahui"
-    teks_fokus = f"pada Bisnis Unit **{pilih_bu}**" if pilih_bu != "Semua Bisnis Unit" else f"secara keseluruhan (didominasi oleh BU **{top_bu}**)"
-    
-    st.markdown(f'''
-        <div class="rekomendasi-box">
-            <strong style="font-size:16px;">🔍 Kesimpulan Eksekutif:</strong><br>
-            Berdasarkan data {teks_fokus}, tingkat kecacatan operasional (Defect Rate) berada di angka <b>{rasio_temuan:.1f}%</b>. 
-            Masalah paling dominan yang merusak kinerja saat ini adalah <b>{top_masalah}</b>, menyumbang <b>{persen_masalah}%</b> dari seluruh total temuan. 
-            Secara geografis/area, FRA atas nama <b>{top_fra}</b> mencatatkan rekor kelalaian terbanyak yang memerlukan atensi pembinaan khusus.
-        </div>
-    ''', unsafe_allow_html=True)
-    
-    st.markdown("**📝 Rekomendasi Tindakan Perbaikan (Corrective Action):**")
-    
-    if "SELISIH UANG" in top_masalah:
-        st.warning("1. **Sidak Cash Opname:** Lakukan perhitungan fisik uang dadakan (cash opname) mingguan pada shift kasir. \n2. **Training SOP Serah Terima:** Wajibkan kasir melakukan check-balance setiap pergantian shift dan disetujui oleh Kepala Toko. \n3. **Cek Sistem CCTV:** Pastikan CCTV menyorot jelas ke arah laci kasir di toko-toko kritis.")
-    elif "STB" in top_masalah:
-        st.info("1. **Disiplin Setoran:** Buat SLA ketat bahwa Setoran Tunai Bank (STB) harus dilakukan h+1, dilarang menunda. \n2. **Verifikasi Bukti:** Area Manager (FRA) harus memvalidasi foto resi bank harian via grup WhatsApp operasional. \n3. **Sanksi Keterlambatan:** Terapkan surat teguran bagi Kepala Toko yang menahan setoran.")
-    elif "BRANKAS" in top_masalah:
-        st.error("1. **Reset Password Berkala:** Wajibkan penggantian PIN brankas setiap kali ada mutasi/resign karyawan pemegang kunci. \n2. **Pembatasan Akses:** Kunci brankas fisik hanya boleh dipegang oleh Kepala Toko / PIC Shift yang bertugas. \n3. **Audit Kepatuhan:** Berikan penalti berat jika ditemukan kombinasi brankas dalam keadaan 'pass/nyangkut' atau sengaja terbuka.")
-    elif "NOTA" in top_masalah:
-        st.info("1. **Filing System:** Wajibkan setiap toko memiliki bantex/map khusus berdasarkan tanggal untuk nota & bon. \n2. **Digitalisasi:** Jika memungkinkan, biasakan foto nota menggunakan HP kantor dan upload ke sistem sebelum nota fisik hilang. \n3. **Audit Berkas:** FRA harus mengecek kelengkapan bon setiap kunjungan rutin.")
-    elif "KASBON" in top_masalah:
-        st.error("1. **Stop Kasbon:** Tegaskan kembali aturan perusahaan bahwa uang toko TIDAK BOLEH digunakan untuk pinjaman/kasbon pribadi karyawan. \n2. **Potong Gaji:** Lakukan pemotongan gaji langsung bagi karyawan yang terbukti melakukan kasbon gantung. \n3. **Teguran FRA:** Berikan peringatan kepada FRA yang membiarkan budaya kasbon terjadi di areanya.")
-    else:
-        st.success("1. **Refreshment Training:** Kumpulkan Kepala Toko bermasalah via Zoom untuk evaluasi kesalahan operasional. \n2. **Checklist Kunjungan:** Update form visit FRA agar lebih fokus mengecek poin-poin krusial yang sering dilanggar. \n3. **Reward & Punishment:** Terapkan pemotongan KPI/Bonus bagi toko dengan temuan terbanyak, dan berikan reward bagi toko yang Zero Defect.")
-
-    st.markdown("---")
-    st.markdown("#### 📂 Arsip Detail Temuan (Raw Data)")
-    
-    st.dataframe(
-        df_temuan[['TANGGAL', 'BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'DETAIL TEMUAN', 'Kategori Temuan']],
-        hide_index=True, use_container_width=True
-    )
+            text=top
