@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. KONFIGURASI HALAMAN (Harus paling atas)
+# 1. KONFIGURASI HALAMAN
 st.set_page_config(page_title="Dashboard Analisa Visit", page_icon="🚀", layout="wide")
 
-# CSS Tambahan untuk mempercantik KPI
 st.markdown('''
     <style>
     .kpi-card { background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #4318FF; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
@@ -17,25 +16,40 @@ st.markdown('''
 
 st.markdown("<h2 style='color:#111c44; font-weight:bold;'>🚀 Dashboard Analisa Visit</h2>", unsafe_allow_html=True)
 
-# 2. KONEKSI KE GOOGLE SHEETS (Link Export CSV)
-# ID Sheet Anda yang kita gunakan sebelumnya
+# 2. MENGAMBIL DATA GOOGLE SHEET (SUDAH DISESUAIKAN DENGAN LINK ANDA)
 SHEET_ID = "1RfrC_LUAZbKrGEN15KPkBXhUz8ei2jyqGdUaKPS4WMY"
 url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
-@st.cache_data(ttl=300) # Data disimpan sementara (cache) selama 5 menit agar web super cepat
+@st.cache_data(ttl=300)
 def load_data():
     df = pd.read_csv(url)
-    df.columns = df.columns.str.strip()
-    df.fillna('', inplace=True)
-    return df
+    
+    # ANTI-ERROR: Ambil data berdasarkan URUTAN KOLOM, bukan nama kolom
+    # Kolom index 0 = Kolom A (Tanggal)
+    # Kolom index 1 = Kolom B (FRA)
+    # Kolom index 3 = Kolom D (Kode Store)
+    # Kolom index 4 = Kolom E (Nama Store)
+    # Kolom index 5 = Kolom F (Detail Temuan)
+    df_clean = pd.DataFrame({
+        'TANGGAL': df.iloc[:, 0].astype(str),
+        'FRA': df.iloc[:, 1].astype(str),
+        'KODE STORE': df.iloc[:, 3].astype(str),
+        'NAMA STORE': df.iloc[:, 4].astype(str),
+        'DETAIL TEMUAN': df.iloc[:, 5].astype(str)
+    })
+    
+    # Bersihkan jika ada sel kosong
+    df_clean = df_clean.replace('nan', '')
+    return df_clean
 
+# Menjalankan fungsi ambil data dengan aman
 try:
     df_mentah = load_data()
 except Exception as e:
-    st.error("Gagal membaca data dari Google Sheets. Pastikan akses link sheet sudah 'Anyone with the link'.")
+    st.error("Gagal membaca data! Pastikan link Google Sheet benar.")
     st.stop()
 
-# 3. ALGORITMA KATEGORI PINTAR
+# 3. ALGORITMA KATEGORI
 def deteksi_kategori(teks):
     teks = str(teks).upper().strip()
     if any(x in teks for x in ["TIDAK ADA", "-", "0", "–", "NIHIL"]) or teks == "":
@@ -51,14 +65,11 @@ def deteksi_kategori(teks):
 
 # 4. PENGOLAHAN DATA
 if not df_mentah.empty:
-    df_mentah['TANGGAL VISIT'] = df_mentah['TANGGAL VISIT'].astype(str)
+    df_mentah['Bulan'] = df_mentah['TANGGAL'].apply(lambda x: x.split(' ')[1] if len(x.split(' ')) >= 3 else 'Unknown')
+    df_mentah['Tahun'] = df_mentah['TANGGAL'].apply(lambda x: x.split(' ')[2] if len(x.split(' ')) >= 3 else 'Unknown')
     
-    # Ambil Bulan dan Tahun
-    df_mentah['Bulan'] = df_mentah['TANGGAL VISIT'].apply(lambda x: x.split(' ')[1] if len(x.split(' ')) >= 3 else 'Unknown')
-    df_mentah['Tahun'] = df_mentah['TANGGAL VISIT'].apply(lambda x: x.split(' ')[2] if len(x.split(' ')) >= 3 else 'Unknown')
-    
-    df_mentah['Kategori Temuan'] = df_mentah['Temuan Visit'].apply(deteksi_kategori)
-    df_mentah['Temuan Visit'] = df_mentah['Temuan Visit'].str.upper()
+    df_mentah['Kategori Temuan'] = df_mentah['DETAIL TEMUAN'].apply(deteksi_kategori)
+    df_mentah['DETAIL TEMUAN'] = df_mentah['DETAIL TEMUAN'].str.upper()
 
     # 5. AREA FILTER (KONTROL)
     st.markdown("---")
@@ -73,7 +84,7 @@ if not df_mentah.empty:
     with col_f2:
         pilih_tahun = st.selectbox("Pilih Tahun:", ["Semua"] + tahun_tersedia)
 
-    # TERAPKAN FILTER KE DATA
+    # TERAPKAN FILTER
     df_filter = df_mentah.copy()
     if pilih_bulan != "Semua":
         df_filter = df_filter[df_filter['Bulan'] == pilih_bulan]
@@ -97,7 +108,6 @@ if not df_mentah.empty:
     if total_temuan > 0:
         st.subheader("📊 Persentase Top 5 Temuan Operasional")
         
-        # Hitung Top 5
         top5_counts = df_temuan['Kategori Temuan'].value_counts().head(5)
         df_top5 = pd.DataFrame({
             'Kategori': top5_counts.index,
@@ -107,7 +117,6 @@ if not df_mentah.empty:
         
         df_top5 = df_top5.sort_values('Persentase', ascending=True)
 
-        # Gambar Grafik
         fig = px.bar(
             df_top5, x='Persentase', y='Kategori', orientation='h', text='Persentase', color='Kategori',
             color_discrete_sequence=['#4318FF', '#39B8FF', '#FF9800', '#FF2D55', '#34C759'][::-1]
@@ -123,15 +132,13 @@ if not df_mentah.empty:
         st.subheader("📋 Detail Temuan (Maks. 5 Contoh per Kategori)")
         kategori_terbanyak = df_top5.sort_values('Jumlah', ascending=False)['Kategori'].tolist()
         
-        # Looping Tabel per Kategori
         for kat in kategori_terbanyak:
             count_kat = top5_counts[kat]
             st.markdown(f"<div style='background-color: #f4f7fe; padding: 10px; border-left: 4px solid #4318FF; font-weight: bold; color: #1b2559; margin-top: 15px;'>{kat} &nbsp;|&nbsp; {count_kat} TEMUAN</div>", unsafe_allow_html=True)
             
             detail_kat = df_temuan[df_temuan['Kategori Temuan'] == kat].head(5)
-            # Tampilkan Tabel
             st.dataframe(
-                detail_kat[['TANGGAL VISIT', 'NAMA FRA', 'KODE STORE', 'NAMA STORE', 'Temuan Visit']],
+                detail_kat[['TANGGAL', 'FRA', 'KODE STORE', 'NAMA STORE', 'DETAIL TEMUAN']],
                 hide_index=True, use_container_width=True
             )
     else:
