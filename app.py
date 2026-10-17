@@ -1,59 +1,59 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
-# 1. KONFIGURASI HALAMAN
-st.set_page_config(page_title="Dashboard Analisa Visit", page_icon="🚀", layout="wide")
+# ==========================================
+# 1. KONFIGURASI & TEMA DASHBOARD
+# ==========================================
+st.set_page_config(page_title="Executive Dashboard - Analisa Visit", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
+# CSS Kustom untuk tampilan yang sangat profesional dan bersih
 st.markdown('''
     <style>
-    .kpi-card { background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #4318FF; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    .kpi-card-2 { border-left-color: #FF9800; }
-    .kpi-title { font-size: 14px; color: #a3aed1; font-weight: bold; margin-bottom: 5px; }
-    .kpi-value { font-size: 32px; font-weight: bold; color: #1b2559; }
+    .metric-container { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px; }
+    .metric-box { background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px; width: 100%; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-top: 4px solid #1E3A8A; }
+    .metric-box.alert { border-top-color: #E11D48; }
+    .metric-box.success { border-top-color: #10B981; }
+    .metric-title { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .metric-value { font-size: 28px; font-weight: 800; color: #0f172a; }
+    .metric-sub { font-size: 12px; font-weight: 500; color: #94a3b8; margin-top: 5px;}
+    .rekomendasi-box { background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px 20px; border-radius: 5px; margin-bottom:15px; }
     </style>
 ''', unsafe_allow_html=True)
 
-st.markdown("<h2 style='color:#111c44; font-weight:bold;'>🚀 Dashboard Analisa Visit</h2>", unsafe_allow_html=True)
-
-# 2. MENGAMBIL DATA GOOGLE SHEET (SUDAH DISESUAIKAN DENGAN LINK ANDA)
+# ==========================================
+# 2. PENGAMBILAN & PEMBERSIHAN DATA
+# ==========================================
 SHEET_ID = "1RfrC_LUAZbKrGEN15KPkBXhUz8ei2jyqGdUaKPS4WMY"
 url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
 @st.cache_data(ttl=300)
 def load_data():
     df = pd.read_csv(url)
-    
-    # ANTI-ERROR: Ambil data berdasarkan URUTAN KOLOM, bukan nama kolom
-    # Kolom index 0 = Kolom A (Tanggal)
-    # Kolom index 1 = Kolom B (FRA)
-    # Kolom index 3 = Kolom D (Kode Store)
-    # Kolom index 4 = Kolom E (Nama Store)
-    # Kolom index 5 = Kolom F (Detail Temuan)
     df_clean = pd.DataFrame({
         'TANGGAL': df.iloc[:, 0].astype(str),
-        'FRA': df.iloc[:, 1].astype(str),
-        'KODE STORE': df.iloc[:, 3].astype(str),
-        'NAMA STORE': df.iloc[:, 4].astype(str),
-        'DETAIL TEMUAN': df.iloc[:, 5].astype(str)
+        'FRA': df.iloc[:, 1].astype(str).str.upper().str.strip(),
+        'KODE STORE': df.iloc[:, 3].astype(str).str.upper(),
+        'NAMA STORE': df.iloc[:, 4].astype(str).str.upper(),
+        'DETAIL TEMUAN': df.iloc[:, 5].astype(str).str.upper().str.strip()
     })
-    
-    # Bersihkan jika ada sel kosong
-    df_clean = df_clean.replace('nan', '')
+    df_clean = df_clean.replace(['NAN', 'NAN ', ''], None)
     return df_clean
 
-# Menjalankan fungsi ambil data dengan aman
 try:
     df_mentah = load_data()
 except Exception as e:
-    st.error("Gagal membaca data! Pastikan link Google Sheet benar.")
+    st.error("Gagal membaca data dari Google Sheets. Pastikan link dapat diakses publik.")
     st.stop()
 
-# 3. ALGORITMA KATEGORI
+# ==========================================
+# 3. ALGORITMA KATEGORISASI (ENGINE)
+# ==========================================
 def deteksi_kategori(teks):
-    teks = str(teks).upper().strip()
-    if any(x in teks for x in ["TIDAK ADA", "-", "0", "–", "NIHIL"]) or teks == "":
-        return None
+    if not teks or pd.isna(teks): return None
+    if any(x in teks for x in ["TIDAK ADA", "-", "0", "–", "NIHIL", "AMAN", "TDK ADA"]): return None
+    
     if "STB" in teks: return "ISU STB (SETORAN)"
     if any(x in teks for x in ["BRANKAS", "PASS"]): return "AKSES/PASSWORD BRANKAS"
     if any(x in teks for x in ["NOTA", "BON"]): return "ADMINISTRASI NOTA/BON"
@@ -63,83 +63,207 @@ def deteksi_kategori(teks):
     if any(x in teks for x in ["MOP", "EDC"]): return "MESIN EDC / MOP"
     return "TEMUAN OPERASIONAL LAINNYA"
 
-# 4. PENGOLAHAN DATA
-if not df_mentah.empty:
-    df_mentah['Bulan'] = df_mentah['TANGGAL'].apply(lambda x: x.split(' ')[1] if len(x.split(' ')) >= 3 else 'Unknown')
-    df_mentah['Tahun'] = df_mentah['TANGGAL'].apply(lambda x: x.split(' ')[2] if len(x.split(' ')) >= 3 else 'Unknown')
+# Ekstrak waktu dan kategori
+df_mentah['Bulan'] = df_mentah['TANGGAL'].apply(lambda x: x.split(' ')[1] if len(x.split(' ')) >= 3 else 'Unknown')
+df_mentah['Tahun'] = df_mentah['TANGGAL'].apply(lambda x: x.split(' ')[2] if len(x.split(' ')) >= 3 else 'Unknown')
+df_mentah['Kategori Temuan'] = df_mentah['DETAIL TEMUAN'].apply(deteksi_kategori)
+df_mentah['Ada Temuan'] = df_mentah['Kategori Temuan'].notna()
+
+# ==========================================
+# 4. SIDEBAR - PANEL FILTER PINTAR
+# ==========================================
+st.sidebar.markdown("### 🎛️ Panel Filter Data")
+st.sidebar.markdown("Gunakan menu ini untuk memfokuskan analisa.")
+
+urutan_bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+bulan_tersedia = [b for b in urutan_bulan if b in df_mentah['Bulan'].unique()]
+tahun_tersedia = sorted(df_mentah[df_mentah['Tahun'] != 'Unknown']['Tahun'].unique(), reverse=True)
+
+pilih_tahun = st.sidebar.selectbox("📅 Pilih Tahun", ["Semua Tahun"] + tahun_tersedia)
+pilih_bulan = st.sidebar.selectbox("🗓️ Pilih Bulan", ["Semua Bulan"] + bulan_tersedia)
+
+# Fitur Filter Tambahan (Drill Down)
+list_fra = sorted([f for f in df_mentah['FRA'].dropna().unique() if f and f != 'NONE'])
+pilih_fra = st.sidebar.selectbox("🧑‍💼 Filter Area (FRA)", ["Semua Area"] + list_fra)
+
+st.sidebar.markdown("---")
+st.sidebar.info("💡 **Tips:** Analisa data bulan berjalan untuk melakukan corrective action lebih dini.")
+
+# Terapkan Filter
+df_filter = df_mentah.copy()
+if pilih_tahun != "Semua Tahun": df_filter = df_filter[df_filter['Tahun'] == pilih_tahun]
+if pilih_bulan != "Semua Bulan": df_filter = df_filter[df_filter['Bulan'] == pilih_bulan]
+if pilih_fra != "Semua Area": df_filter = df_filter[df_filter['FRA'] == pilih_fra]
+
+# Hitung Metrik Utama
+total_visit = len(df_filter)
+df_temuan = df_filter[df_filter['Ada Temuan'] == True]
+total_temuan = len(df_temuan)
+toko_unik_bermasalah = df_temuan['NAMA STORE'].nunique()
+rasio_temuan = (total_temuan / total_visit * 100) if total_visit > 0 else 0
+
+# ==========================================
+# 5. HEADER & KPI METRICS (LAYAR UTAMA)
+# ==========================================
+st.markdown("<h2 style='color:#0f172a; font-weight:800; margin-bottom:0px;'>📈 Executive Dashboard: Visit Operations</h2>", unsafe_allow_html=True)
+st.markdown("<p style='color:#64748b; margin-bottom:25px;'>Analisa mendalam temuan operasional lapangan untuk mendukung keputusan strategis.</p>", unsafe_allow_html=True)
+
+# Render KPI Boxes
+st.markdown(f'''
+    <div class="metric-container">
+        <div class="metric-box">
+            <div class="metric-title">Total Kunjungan (Visit)</div>
+            <div class="metric-value">{total_visit}</div>
+            <div class="metric-sub">Toko yang diaudit pada periode ini</div>
+        </div>
+        <div class="metric-box alert">
+            <div class="metric-title">Kasus Temuan Ditemukan</div>
+            <div class="metric-value">{total_temuan}</div>
+            <div class="metric-sub">Total rincian isu operasional</div>
+        </div>
+        <div class="metric-box alert">
+            <div class="metric-title">Toko Bermasalah</div>
+            <div class="metric-value">{toko_unik_bermasalah}</div>
+            <div class="metric-sub">Toko unik yang memiliki temuan</div>
+        </div>
+        <div class="metric-box {'alert' if rasio_temuan > 30 else 'success'}">
+            <div class="metric-title">Defect Rate (Rasio Masalah)</div>
+            <div class="metric-value">{rasio_temuan:.1f}%</div>
+            <div class="metric-sub">Dari total kunjungan terdapat masalah</div>
+        </div>
+    </div>
+''', unsafe_allow_html=True)
+
+if total_temuan == 0:
+    st.success("🎉 Luar biasa! Tidak ada data temuan (Zero Defect) pada filter yang Anda pilih. Operasional berjalan sangat bersih.")
+    st.stop()
+
+# ==========================================
+# 6. TAB NAVIGASI ANALISA (UI MODERN)
+# ==========================================
+tab1, tab2, tab3 = st.tabs(["📊 Ringkasan Eksekutif", "🎯 Analisa Mendalam (Area & Toko)", "💡 Kesimpulan & Action Plan"])
+
+# ------------------------------------------
+# TAB 1: RINGKASAN EKSEKUTIF (TOP 5 Isu)
+# ------------------------------------------
+with tab1:
+    col_chart1, col_chart2 = st.columns([6, 4])
     
-    df_mentah['Kategori Temuan'] = df_mentah['DETAIL TEMUAN'].apply(deteksi_kategori)
-    df_mentah['DETAIL TEMUAN'] = df_mentah['DETAIL TEMUAN'].str.upper()
-
-    # 5. AREA FILTER (KONTROL)
-    st.markdown("---")
-    col_f1, col_f2 = st.columns(2)
-    
-    urutan_bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
-    bulan_tersedia = [b for b in urutan_bulan if b in df_mentah['Bulan'].unique()]
-    tahun_tersedia = sorted(df_mentah[df_mentah['Tahun'] != 'Unknown']['Tahun'].unique(), reverse=True)
-    
-    with col_f1:
-        pilih_bulan = st.selectbox("Pilih Bulan:", ["Semua"] + bulan_tersedia)
-    with col_f2:
-        pilih_tahun = st.selectbox("Pilih Tahun:", ["Semua"] + tahun_tersedia)
-
-    # TERAPKAN FILTER
-    df_filter = df_mentah.copy()
-    if pilih_bulan != "Semua":
-        df_filter = df_filter[df_filter['Bulan'] == pilih_bulan]
-    if pilih_tahun != "Semua":
-        df_filter = df_filter[df_filter['Tahun'] == pilih_tahun]
-
-    total_visit = len(df_filter)
-    df_temuan = df_filter[df_filter['Kategori Temuan'].notnull()]
-    total_temuan = len(df_temuan)
-
-    # 6. TAMPILAN KPI BOX
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f'<div class="kpi-card"><div class="kpi-title">TOTAL TOKO DIKUNJUNGI</div><div class="kpi-value">{total_visit}</div></div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown(f'<div class="kpi-card kpi-card-2"><div class="kpi-title">TOTAL TEMUAN PERIODE INI</div><div class="kpi-value">{total_temuan}</div></div>', unsafe_allow_html=True)
-    
-    st.write("") 
-
-    # 7. GRAFIK DAN TABEL DETAIL
-    if total_temuan > 0:
-        st.subheader("📊 Persentase Top 5 Temuan Operasional")
+    with col_chart1:
+        st.markdown("#### Distribusi Kategori Temuan Utama")
+        top_kategori = df_temuan['Kategori Temuan'].value_counts().reset_index()
+        top_kategori.columns = ['Kategori', 'Jumlah']
+        top_kategori['Persentase'] = (top_kategori['Jumlah'] / total_temuan * 100).round(1)
         
-        top5_counts = df_temuan['Kategori Temuan'].value_counts().head(5)
-        df_top5 = pd.DataFrame({
-            'Kategori': top5_counts.index,
-            'Jumlah': top5_counts.values,
-            'Persentase': (top5_counts.values / total_temuan * 100).round(1)
-        })
-        
-        df_top5 = df_top5.sort_values('Persentase', ascending=True)
-
-        fig = px.bar(
-            df_top5, x='Persentase', y='Kategori', orientation='h', text='Persentase', color='Kategori',
-            color_discrete_sequence=['#4318FF', '#39B8FF', '#FF9800', '#FF2D55', '#34C759'][::-1]
+        # Grafik Bar Horizontal Profesional (Warna seragam, elegan)
+        fig_bar = px.bar(
+            top_kategori.sort_values('Jumlah', ascending=True), 
+            x='Persentase', y='Kategori', orientation='h',
+            text=top_kategori.sort_values('Jumlah', ascending=True).apply(lambda x: f"{x['Jumlah']} kasus ({x['Persentase']}%)", axis=1),
+            color_discrete_sequence=['#2563eb'] # Corporate Blue
         )
-        fig.update_traces(texttemplate='%{text}%', textposition='outside', showlegend=False)
-        fig.update_layout(
-            xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=True, gridcolor='#e9edf7', range=[0, df_top5['Persentase'].max() * 1.2]),
-            margin=dict(l=0, r=0, t=10, b=0), font=dict(family="Arial", size=14, color="#1b2559"), height=350
+        fig_bar.update_traces(textposition='outside')
+        fig_bar.update_layout(
+            xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', 
+            xaxis=dict(showgrid=True, gridcolor='#f1f5f9', range=[0, top_kategori['Persentase'].max() * 1.3]),
+            margin=dict(l=0, r=0, t=10, b=0), height=380
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-        st.subheader("📋 Detail Temuan (Maks. 5 Contoh per Kategori)")
-        kategori_terbanyak = df_top5.sort_values('Jumlah', ascending=False)['Kategori'].tolist()
+    with col_chart2:
+        st.markdown("#### Proporsi Kunjungan Bersih vs Bermasalah")
+        # Grafik Donut
+        kunjungan_bersih = total_visit - total_temuan
+        if kunjungan_bersih < 0: kunjungan_bersih = 0 # Safety check
         
-        for kat in kategori_terbanyak:
-            count_kat = top5_counts[kat]
-            st.markdown(f"<div style='background-color: #f4f7fe; padding: 10px; border-left: 4px solid #4318FF; font-weight: bold; color: #1b2559; margin-top: 15px;'>{kat} &nbsp;|&nbsp; {count_kat} TEMUAN</div>", unsafe_allow_html=True)
-            
-            detail_kat = df_temuan[df_temuan['Kategori Temuan'] == kat].head(5)
-            st.dataframe(
-                detail_kat[['TANGGAL', 'FRA', 'KODE STORE', 'NAMA STORE', 'DETAIL TEMUAN']],
-                hide_index=True, use_container_width=True
-            )
+        fig_donut = px.pie(
+            names=['Kunjungan Bersih', 'Ada Temuan'], 
+            values=[kunjungan_bersih, total_temuan],
+            hole=0.6,
+            color_discrete_sequence=['#10B981', '#E11D48'] # Hijau vs Merah
+        )
+        fig_donut.update_traces(textinfo='percent', textfont_size=14, hoverinfo='label+value')
+        fig_donut.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=380, showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5))
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+# ------------------------------------------
+# TAB 2: ANALISA MENDALAM (Deep Dive Area & Toko)
+# ------------------------------------------
+with tab2:
+    col_deep1, col_deep2 = st.columns(2)
+    
+    with col_deep1:
+        st.markdown("#### 🚨 Kinerja Area (Top FRA dengan Temuan Terbanyak)")
+        st.caption("Fokuskan pembinaan dan teguran pada FRA di urutan teratas.")
+        
+        fra_counts = df_temuan['FRA'].value_counts().reset_index().head(10)
+        fra_counts.columns = ['Nama FRA', 'Total Temuan']
+        
+        fig_fra = px.bar(fra_counts, x='Nama FRA', y='Total Temuan', text='Total Temuan', color='Total Temuan', color_continuous_scale='Reds')
+        fig_fra.update_traces(textposition='outside')
+        fig_fra.update_layout(xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', showlegend=False, coloraxis_showscale=False, height=350)
+        st.plotly_chart(fig_fra, use_container_width=True)
+
+    with col_deep2:
+        st.markdown("#### 🏪 Top 10 Toko Kritis (Sering Bermasalah)")
+        st.caption("Toko-toko ini membutuhkan kunjungan audit lanjutan segera.")
+        
+        store_counts = df_temuan.groupby(['KODE STORE', 'NAMA STORE']).size().reset_index(name='Jumlah Temuan')
+        store_counts = store_counts.sort_values('Jumlah Temuan', ascending=False).head(10)
+        
+        st.dataframe(
+            store_counts,
+            column_config={
+                "KODE STORE": st.column_config.TextColumn("Kode"),
+                "NAMA STORE": st.column_config.TextColumn("Nama Toko"),
+                "Jumlah Temuan": st.column_config.ProgressColumn("Frekuensi", format="%f", min_value=0, max_value=int(store_counts['Jumlah Temuan'].max()))
+            },
+            hide_index=True, use_container_width=True
+        )
+
+# ------------------------------------------
+# TAB 3: KESIMPULAN & ACTION PLAN (AI BASE)
+# ------------------------------------------
+with tab3:
+    st.markdown("#### 💡 Intelijen Bisnis: Insight & Rekomendasi Tindakan")
+    
+    # Deteksi masalah utama (Root Cause Analysis)
+    top_masalah = top_kategori.iloc[0]['Kategori']
+    persen_masalah = top_kategori.iloc[0]['Persentase']
+    top_fra = fra_counts.iloc[0]['Nama FRA'] if not fra_counts.empty else "Tidak diketahui"
+    
+    # 1. Narasi Kesimpulan
+    st.markdown(f'''
+        <div class="rekomendasi-box">
+            <strong style="font-size:16px;">🔍 Kesimpulan Eksekutif:</strong><br>
+            Berdasarkan data yang dianalisa, tingkat kecacatan operasional (Defect Rate) berada di angka <b>{rasio_temuan:.1f}%</b>. 
+            Masalah paling dominan yang merusak kinerja saat ini adalah <b>{top_masalah}</b>, yang menyumbang <b>{persen_masalah}%</b> dari seluruh total temuan. 
+            Secara geografis/area, FRA atas nama <b>{top_fra}</b> mencatatkan rekor temuan terbanyak yang memerlukan atensi khusus.
+        </div>
+    ''', unsafe_allow_html=True)
+    
+    # 2. Generator Action Plan Otomatis
+    st.markdown("**📝 Rekomendasi Tindakan Perbaikan (Corrective Action):**")
+    
+    if "SELISIH UANG" in top_masalah:
+        st.warning("1. **Sidak Cash Opname:** Lakukan perhitungan fisik uang dadakan (cash opname) mingguan pada shift kasir. \n2. **Training SOP Serah Terima:** Wajibkan kasir melakukan check-balance setiap pergantian shift dan disetujui oleh Kepala Toko. \n3. **Cek Sistem CCTV:** Pastikan CCTV menyorot jelas ke arah laci kasir di toko-toko kritis.")
+    elif "STB" in top_masalah:
+        st.info("1. **Disiplin Setoran:** Buat SLA ketat bahwa Setoran Tunai Bank (STB) harus dilakukan h+1, dilarang menunda. \n2. **Verifikasi Bukti:** Area Manager (FRA) harus memvalidasi foto resi bank harian via grup WhatsApp operasional. \n3. **Sanksi Keterlambatan:** Terapkan surat teguran bagi Kepala Toko yang menahan setoran.")
+    elif "BRANKAS" in top_masalah:
+        st.error("1. **Reset Password Berkala:** Wajibkan penggantian PIN brankas setiap kali ada mutasi/resign karyawan pemegang kunci. \n2. **Pembatasan Akses:** Kunci brankas fisik hanya boleh dipegang oleh Kepala Toko / PIC Shift yang bertugas. \n3. **Audit Kepatuhan:** Berikan penalti berat jika ditemukan kombinasi brankas dalam keadaan 'pass/nyangkut' atau terbuka.")
+    elif "NOTA" in top_masalah:
+        st.info("1. **Filing System:** Wajibkan setiap toko memiliki bantex/map khusus berdasarkan tanggal untuk nota & bon. \n2. **Digitalisasi:** Jika memungkinkan, biasakan foto nota menggunakan HP kantor dan upload ke sistem sebelum nota fisik hilang. \n3. **Audit Berkas:** FRA harus mengecek kelengkapan bon setiap kunjungan rutin.")
+    elif "KASBON" in top_masalah:
+        st.error("1. **Stop Kasbon:** Tegaskan kembali aturan perusahaan bahwa uang toko TIDAK BOLEH digunakan untuk pinjaman/kasbon pribadi karyawan. \n2. **Potong Gaji:** Lakukan pemotongan gaji langsung bagi karyawan yang terbukti melakukan kasbon gantung. \n3. **Teguran FRA:** Berikan peringatan kepada FRA yang membiarkan budaya kasbon terjadi di areanya.")
     else:
-        st.info("Tidak ada data temuan pada filter yang dipilih.")
+        st.success("1. **Refreshment Training:** Kumpulkan Kepala Toko bermasalah via Zoom untuk evaluasi kesalahan operasional. \n2. **Checklist Kunjungan:** Update form visit FRA agar lebih fokus mengecek poin-poin krusial yang sering dilanggar. \n3. **Reward & Punishment:** Terapkan pemotongan KPI/Bonus bagi toko dengan temuan terbanyak, dan berikan reward bagi toko yang Zero Defect.")
+
+    # 3. Raw Data dengan Filter
+    st.markdown("---")
+    st.markdown("#### 📂 Arsip Detail Temuan (Raw Data)")
+    st.caption("Gunakan tabel ini untuk melihat rincian catatan lengkap. Anda bisa mengklik judul kolom untuk mengurutkan data.")
+    
+    st.dataframe(
+        df_temuan[['TANGGAL', 'FRA', 'KODE STORE', 'NAMA STORE', 'DETAIL TEMUAN', 'Kategori Temuan']],
+        hide_index=True, use_container_width=True
+    )
