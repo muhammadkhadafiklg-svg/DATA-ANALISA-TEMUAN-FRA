@@ -287,7 +287,7 @@ with tab3:
     )
 
 # ==========================================
-# 7. AI ASISTEN (CHAT)
+# 7. AI ASISTEN (CHAT - DIOPTIMALKAN & ANTI-OVERLOAD)
 # ==========================================
 st.markdown("<hr style='margin-top: 40px;'>", unsafe_allow_html=True)
 st.markdown("<h3 style='color:#000000; font-weight:800;'>🤖 AI Asisten</h3>", unsafe_allow_html=True)
@@ -305,9 +305,9 @@ if "GROQ_API_KEY" in st.secrets:
             temperature=0.1
         )
         
-        # Mengirimkan seluruh data bersih ke AI agar bisa mencocokkan bulan September & Oktober
-        data_ringkas = df_mentah.to_markdown(index=False)
-        pertanyaan = st.chat_input("Ketik pertanyaan Anda di sini (Contoh: Apakah ada temuan yang sama pada September dan Oktober 2026?)...")
+        # Mengirim ringkasan data yang difiltrasi agar aman dari batasan token / pesan terlalu panjang
+        data_ringkas = df_tampil.tail(40).to_markdown(index=False)
+        pertanyaan = st.chat_input("Ketik pertanyaan Anda di sini (Contoh: Bandingkan temuan September dan Oktober 2026)...")
         
         if pertanyaan:
             with st.chat_message("user"):
@@ -318,7 +318,7 @@ if "GROQ_API_KEY" in st.secrets:
                     
                     system_prompt = (
                         "Anda adalah AI Asisten untuk M Khadafi yang mengelola data analisa operasional toko. "
-                        "Berikut adalah data lengkap seluruh temuan operasional:\n\n"
+                        "Berikut adalah cuplikan data temuan operasional:\n\n"
                         f"{data_ringkas}\n\n"
                         "Tugas Anda: Jawab pertanyaan analitik berdasarkan data tabel tersebut secara cermat. "
                         "Jika pengguna menanyakan perbandingan bulan (seperti September dan Oktober 2026), teliti kolom TANGGAL dan DETAIL TEMUAN untuk mencocokkan apakah ada toko atau kasus temuan yang berulang/sama.\n"
