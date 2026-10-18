@@ -21,7 +21,7 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 # ==========================================
-# 2. PENGAMBILAN DATA (KEMBALI KE CARA KE-2 YANG AMAN)
+# 2. PENGAMBILAN DATA (AUTO-EXTRACT BU DARI INDEX 3)
 # ==========================================
 SHEET_ID = "1RfrC_LUAZbKrGEN15KPkBXhUz8ei2jyqGdUaKPS4WMY"
 url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -117,7 +117,7 @@ if pilih_fra != "Semua Area": df_filter = df_filter[df_filter['FRA'] == pilih_fr
 total_visit = len(df_filter)
 df_temuan = df_filter[df_filter['Ada Temuan'] == True]
 total_temuan = len(df_temuan)
-toko_unik_bermasalah = df_temuan['NAMA STORE'].nunique()
+toko_kritis = df_temuan['NAMA STORE'].nunique()
 rasio_temuan = (total_temuan / total_visit * 100) if total_visit > 0 else 0
 
 # ==========================================
@@ -140,11 +140,11 @@ st.markdown(f'''
         </div>
         <div class="metric-box alert">
             <div class="metric-title">Toko Kritis</div>
-            <div class="metric-value">{toko_unik_bermasalah}</div>
+            <div class="metric-value">{toko_kritis}</div>
             <div class="metric-sub">Toko unik yang memiliki temuan</div>
         </div>
         <div class="metric-box {'alert' if rasio_temuan > 30 else 'success'}">
-            <div class="metric-title">Defect Rate (Rasio Masalah)</div>
+            <div class="metric-title">Defect Rate (Rasio Isu)</div>
             <div class="metric-value">{rasio_temuan:.1f}%</div>
             <div class="metric-sub">Tingkat kecacatan dari total visit</div>
         </div>
@@ -189,7 +189,7 @@ with tab1:
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with col_chart2:
-        st.markdown("#### Proporsi Kunjungan Bersih vs Bermasalah")
+        st.markdown("#### Proporsi Kunjungan Bersih vs Ada Temuan")
         kunjungan_bersih = total_visit - total_temuan if (total_visit - total_temuan) > 0 else 0
         fig_donut = px.pie(names=['Kunjungan Bersih', 'Ada Temuan'], values=[kunjungan_bersih, total_temuan], hole=0.6, color_discrete_sequence=['#10B981', '#E11D48'])
         fig_donut.update_traces(textinfo='percent', textfont_size=14, hoverinfo='label+value')
@@ -213,7 +213,7 @@ with tab2:
     col_deep1, col_deep2 = st.columns(2)
     
     with col_deep1:
-        st.markdown("#### 🚨 Kinerja Area (Top FRA Bermasalah)")
+        st.markdown("#### 🚨 Kinerja Area (Top FRA Kritis)")
         fra_counts = df_temuan['FRA'].value_counts().reset_index().head(10)
         fra_counts.columns = ['Nama FRA', 'Total Temuan']
         
@@ -239,7 +239,7 @@ with tab2:
         )
 
 # ------------------------------------------
-# TAB 3: KESIMPULAN & ACTION PLAN 
+# TAB 3: KESIMPULAN & ACTION PLAN (AI BASE)
 # ------------------------------------------
 with tab3:
     st.markdown("#### 💡 Intelijen Bisnis: Insight & Rekomendasi Tindakan")
@@ -268,67 +268,4 @@ with tab3:
     elif "BRANKAS" in top_masalah:
         st.error("1. **Reset Password Berkala:** Wajibkan penggantian PIN brankas setiap kali ada mutasi/resign karyawan pemegang kunci.\n2. **Pembatasan Akses:** Kunci brankas fisik hanya boleh dipegang oleh Kepala Toko / PIC Shift yang bertugas.\n3. **Audit Kepatuhan:** Berikan penalti berat jika ditemukan kombinasi brankas dalam keadaan 'pass/nyangkut' atau sengaja terbuka.")
     elif "NOTA" in top_masalah:
-        st.info("1. **Filing System:** Wajibkan setiap toko memiliki bantex/map khusus berdasarkan tanggal untuk nota & bon.\n2. **Digitalisasi:** Jika memungkinkan, biasakan foto nota menggunakan HP kantor dan upload ke sistem sebelum nota fisik hilang.\n3. **Audit Berkas:** FRA harus mengecek kelengkapan bon setiap kunjungan rutin.")
-    elif "KASBON" in top_masalah:
-        st.error("1. **Stop Kasbon:** Tegaskan kembali aturan perusahaan bahwa uang toko TIDAK BOLEH digunakan untuk pinjaman/kasbon pribadi karyawan.\n2. **Potong Gaji:** Lakukan pemotongan gaji langsung bagi karyawan yang terbukti melakukan kasbon gantung.\n3. **Teguran FRA:** Berikan peringatan kepada FRA yang membiarkan budaya kasbon terjadi di areanya.")
-    else:
-        st.success("1. **Refreshment Training:** Kumpulkan Kepala Toko bermasalah via Zoom untuk evaluasi kesalahan operasional.\n2. **Checklist Kunjungan:** Update form visit FRA agar lebih fokus mengecek poin-poin krusial yang sering dilanggar.\n3. **Reward & Punishment:** Terapkan pemotongan KPI/Bonus bagi toko dengan temuan terbanyak, dan berikan reward bagi toko yang Zero Defect.")
-
-    st.markdown("---")
-    st.markdown("#### 📂 Arsip Detail Temuan (Diurutkan / Sorted by BU)")
-    
-    df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
-    df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
-    
-    st.dataframe(df_tampil, hide_index=True, use_container_width=True)
-
-# ==========================================
-# 7. ASISTEN AI EXECUTIVE (CHAT)
-# ==========================================
-st.markdown("---")
-st.markdown("#### 🤖 Asisten AI Executive (Tanya Jawab Data)")
-st.caption("Ketik pertanyaan Anda tentang data temuan ini. AI akan merangkumnya untuk Anda.")
-
-if "GROQ_API_KEY" in st.secrets:
-    try:
-        from langchain_groq import ChatGroq
-        from langchain_core.messages import HumanMessage, SystemMessage
-        
-        # Model LLaMA-3 yang dijamin stabil
-        llm = ChatGroq(
-            groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="llama3-8b-8192", 
-            temperature=0.1
-        )
-        
-        # Ambil 30 data teratas saja agar proses instan dan tidak error token
-        data_ringkas = df_tampil.head(30).to_markdown(index=False)
-        
-        pertanyaan = st.chat_input("Contoh: Toko mana yang paling parah masalah brankasnya?")
-        
-        if pertanyaan:
-            with st.chat_message("user"):
-                st.write(pertanyaan)
-            
-            with st.chat_message("assistant"):
-                with st.spinner('AI sedang membaca data...'):
-                    
-                    system_prompt = (
-                        "Anda adalah Asisten AI Eksekutif korporat. Berikut sebagian data temuan operasional toko:\n\n"
-                        f"{data_ringkas}\n\n"
-                        "Jawab pertanyaan hanya berdasarkan data tabel tersebut. Gunakan Bahasa Indonesia yang rapi, ringkas, dan profesional. "
-                        "DILARANG menggunakan kata 'bermasalah', selalu gunakan istilah 'toko kritis' atau 'ada temuan'."
-                    )
-                    
-                    messages = [
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=pertanyaan)
-                    ]
-                    
-                    response = llm.invoke(messages)
-                    st.write(response.content)
-                    
-    except Exception as e:
-        st.error(f"Sistem AI terkendala: {e}")
-else:
-    st.warning("⚠️ Kunci GROQ_API_KEY belum dipasang di menu Settings > Secrets Streamlit.")
+        st.info("1. **Filing System:** Wajibkan setiap toko memiliki bantex/map khusus berdasarkan tanggal untuk nota & bon.\n2. **Digitalisasi:** Jika
