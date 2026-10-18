@@ -199,10 +199,14 @@ if "GROQ_API_KEY" in st.secrets:
         from langchain_groq import ChatGroq
         from langchain_experimental.agents import create_pandas_dataframe_agent
         
-        # 1. Menghubungkan ke Otak Groq (Llama-3) dengan Suhu 0 agar fokus pada data murni
-        llm = ChatGroq(groq_api_key=st.secrets["GROQ_API_KEY"], model_name="llama3-70b-8192", temperature=0)
+        # 1. Menghubungkan ke Otak Groq VERSI TERBARU (Llama 3.1 Versatile)
+        llm = ChatGroq(
+            groq_api_key=st.secrets["GROQ_API_KEY"], 
+            model_name="llama-3.1-70b-versatile", 
+            temperature=0
+        )
         
-        # 2. Membuat Agen Pembaca Data (LangChain Agent)
+        # 2. Membuat Agen Pembaca Data
         agen_data = create_pandas_dataframe_agent(
             llm, 
             df_tampil, 
