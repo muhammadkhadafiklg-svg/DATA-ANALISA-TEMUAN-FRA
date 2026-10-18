@@ -199,10 +199,10 @@ if "GROQ_API_KEY" in st.secrets:
         from langchain_groq import ChatGroq
         from langchain_experimental.agents import create_pandas_dataframe_agent
         
-        # 1. Menghubungkan ke Otak Groq VERSI TERBARU (Llama 3.1 Versatile)
+        # 1. Menghubungkan ke Otak Groq Model Terbaru Aktif
         llm = ChatGroq(
             groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="llama-3.1-70b-versatile", 
+            model_name="openai/gpt-oss-120b", 
             temperature=0
         )
         
@@ -211,7 +211,7 @@ if "GROQ_API_KEY" in st.secrets:
             llm, 
             df_tampil, 
             verbose=False, 
-            allow_dangerous_code=True # Wajib diaktifkan untuk server Streamlit
+            allow_dangerous_code=True
         )
         
         # 3. Membuat Kotak Chat
