@@ -83,15 +83,12 @@ except Exception as e:
 # 3. KATEGORISASI (ENGINE LOGIKA KOSONG)
 # ==========================================
 def deteksi_kategori(teks):
-    # Jika kosong atau bernilai null, dianggap tidak ada temuan
     if not teks or pd.isna(teks) or str(teks).strip() == "": return None
     
     teks_upper = str(teks).upper()
-    # Logika filter untuk store yang aman / tidak ada temuan
     kata_aman = ["TIDAK ADA", "-", "0", "–", "NIHIL", "AMAN", "TDK ADA", "KOSONG", "TIDAK DIISI", "TIDAK ADA TEMUAN"]
     if any(x in teks_upper for x in kata_aman): return None
     
-    # Logika klasifikasi temuan
     if "STB" in teks_upper: return "ISU STB (SETORAN)"
     if any(x in teks_upper for x in ["BRANKAS", "PASS"]): return "AKSES/PASSWORD BRANKAS"
     if any(x in teks_upper for x in ["NOTA", "BON"]): return "ADMINISTRASI NOTA/BON"
@@ -188,7 +185,6 @@ if total_temuan == 0:
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["📊 Analisa Kategori", "🏢 Analisa Area & Toko", "📋 Arsip & Rekomendasi"])
 
-# --- TAB 1 ---
 with tab1:
     col_chart1, col_chart2 = st.columns([6, 4])
     with col_chart1:
@@ -212,9 +208,7 @@ with tab1:
         fig_donut.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=380, showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5))
         st.plotly_chart(fig_donut, use_container_width=True)
 
-# --- TAB 2 ---
 with tab2:
-    # Menghapus Diagram BU yang mengganggu, menyisakan FRA dan Tabel
     col_deep1, col_deep2 = st.columns(2)
     
     with col_deep1:
@@ -243,7 +237,6 @@ with tab2:
             hide_index=True, use_container_width=True, height=400
         )
 
-# --- TAB 3 ---
 df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
 df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
 
@@ -265,17 +258,17 @@ with tab3:
     st.markdown("<h5 style='color:#000000; font-weight:800; margin-top:15px;'>Rekomendasi Operasional:</h5>", unsafe_allow_html=True)
     
     if "SELISIH UANG" in top_masalah:
-        st.warning("""1. **Validasi Kas Fisik:** Mengagendakan proses cash opname secara acak pada saat pergantian shift.\n2. **Kepatuhan Administrasi:** Memastikan seluruh form serah terima dana ditandatangani sesuai SOP yang berlaku.\n3. **Monitoring Fasilitas:** Mengevaluasi fungsi dan arah sorotan CCTV di area mesin kasir.""")
+        st.warning("1. **Validasi Kas Fisik:** Mengagendakan proses cash opname secara acak pada saat pergantian shift.\n2. **Kepatuhan Administrasi:** Memastikan seluruh form serah terima dana ditandatangani sesuai SOP yang berlaku.\n3. **Monitoring Fasilitas:** Mengevaluasi fungsi dan arah sorotan CCTV di area mesin kasir.")
     elif "STB" in top_masalah:
-        st.info("""1. **SOP Setoran:** Memastikan seluruh setoran bank (STB) diselesaikan selambatnya H+1.\n2. **Verifikasi Data:** Meminta validasi bukti transfer/resi melalui grup komunikasi operasional area.\n3. **Tinjauan Kebijakan:** Melakukan review performa toko yang memiliki frekuensi keterlambatan STB tinggi.""")
+        st.info("1. **SOP Setoran:** Memastikan seluruh setoran bank (STB) diselesaikan selambatnya H+1.\n2. **Verifikasi Data:** Meminta validasi bukti transfer/resi melalui grup komunikasi operasional area.\n3. **Tinjauan Kebijakan:** Melakukan review performa toko yang memiliki frekuensi keterlambatan STB tinggi.")
     elif "BRANKAS" in top_masalah:
-        st.error("""1. **Protokol Kombinasi Sandi:** Merekomendasikan pembaruan PIN brankas secara berkala atau pasca mutasi personel.\n2. **Otorisasi Akses:** Mengontrol dengan ketat pembagian anak kunci fisik hanya kepada personel yang berwenang.\n3. **Pengecekan Fisik:** Melakukan verifikasi rutin bahwa pintu brankas tidak dalam posisi sengaja dibiarkan terbuka.""")
+        st.error("1. **Protokol Kombinasi Sandi:** Merekomendasikan pembaruan PIN brankas secara berkala atau pasca mutasi personel.\n2. **Otorisasi Akses:** Mengontrol dengan ketat pembagian anak kunci fisik hanya kepada personel yang berwenang.\n3. **Pengecekan Fisik:** Melakukan verifikasi rutin bahwa pintu brankas tidak dalam posisi sengaja dibiarkan terbuka.")
     elif "NOTA" in top_masalah:
-        st.info("""1. **Manajemen Arsip:** Mengoptimalkan penggunaan alat pengarsipan (bantex/map) yang diindeks berdasarkan tanggal.\n2. **Validasi Digital:** Mendorong digitalisasi data nota melalui perangkat operasional sebelum nota fisik dikirim.\n3. **Audit Kelengkapan:** Menjadikan pengecekan kesesuaian bon pengeluaran sebagai standar prosedur visit.""")
+        st.info("1. **Manajemen Arsip:** Mengoptimalkan penggunaan alat pengarsipan (bantex/map) yang diindeks berdasarkan tanggal.\n2. **Validasi Digital:** Mendorong digitalisasi data nota melalui perangkat operasional sebelum nota fisik dikirim.\n3. **Audit Kelengkapan:** Menjadikan pengecekan kesesuaian bon pengeluaran sebagai standar prosedur visit.")
     elif "KASBON" in top_masalah:
-        st.error("""1. **Sosialisasi Ulang:** Memberikan penegasan terkait kebijakan perusahaan yang melarang penggunaan dana operasional untuk kepentingan di luar prosedur.\n2. **Koordinasi Keuangan:** Melakukan rekonsiliasi data dengan tim terkait untuk menindaklanjuti status kasbon yang menggantung.\n3. **Monitoring Area:** Menginstruksikan FRA untuk mengawasi ketat pergerakan Petty Cash harian.""")
+        st.error("1. **Sosialisasi Ulang:** Memberikan penegasan terkait kebijakan perusahaan yang melarang penggunaan dana operasional untuk kepentingan di luar prosedur.\n2. **Koordinasi Keuangan:** Melakukan rekonsiliasi data dengan tim terkait untuk menindaklanjuti status kasbon yang menggantung.\n3. **Monitoring Area:** Menginstruksikan FRA untuk mengawasi ketat pergerakan Petty Cash harian.")
     else:
-        st.success("""1. **Refreshment Materi:** Menjadwalkan pelatihan penyegaran terkait prosedur operasional kepada jaringan toko.\n2. **Fokus Audit:** Menyesuaikan poin evaluasi pada lembar kerja audit FRA dengan tren temuan terbaru.\n3. **Analisa Performa:** Mengaitkan data tingkat penyelesaian temuan operasional dengan indikator penilaian kinerja (KPI).""")
+        st.success("1. **Refreshment Materi:** Menjadwalkan pelatihan penyegaran terkait prosedur operasional kepada jaringan toko.\n2. **Fokus Audit:** Menyesuaikan poin evaluasi pada lembar kerja audit FRA dengan tren temuan terbaru.\n3. **Analisa Performa:** Mengaitkan data tingkat penyelesaian temuan operasional dengan indikator penilaian kinerja (KPI).")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown("<h4 style='color:#0f172a; font-weight:800;'>Tabel Arsip Data Temuan</h4>", unsafe_allow_html=True)
@@ -306,9 +299,10 @@ if "GROQ_API_KEY" in st.secrets:
         from langchain_groq import ChatGroq
         from langchain_core.messages import HumanMessage, SystemMessage
         
+        # Diperbarui menggunakan model Groq terbaru yang aktif
         llm = ChatGroq(
             groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="llama3-8b-8192", 
+            model_name="llama-3.1-8b-instant", 
             temperature=0.1
         )
         
