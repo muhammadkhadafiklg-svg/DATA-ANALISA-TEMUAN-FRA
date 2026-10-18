@@ -3,11 +3,10 @@ import pandas as pd
 import plotly.express as px
 
 # ==========================================
-# 1. KONFIGURASI & TEMA DASHBOARD KORPORAT
+# 1. KONFIGURASI & TEMA DASHBOARD (VERSI MANTAP)
 # ==========================================
 st.set_page_config(page_title="Executive Dashboard - Analisa Visit", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
-# Mengembalikan gaya CSS ke versi MANTAP yang sangat nyaman dibaca
 st.markdown('''
     <style>
     .metric-container { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px; }
@@ -22,7 +21,7 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 # ==========================================
-# 2. PENGAMBILAN DATA (AUTO-EXTRACT BU)
+# 2. PENGAMBILAN DATA (BACA KOLOM G UNTUK BU)
 # ==========================================
 SHEET_ID = "1RfrC_LUAZbKrGEN15KPkBXhUz8ei2jyqGdUaKPS4WMY"
 url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -31,25 +30,24 @@ url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 def load_data():
     df = pd.read_csv(url)
     
-    # Ekstraksi Kode Toko & BU
-    raw_kode = df.iloc[:, 3].astype(str).str.upper().str.strip()
-    kode_toko_bersih = raw_kode.apply(lambda x: x[:4] if len(x) >= 4 else x)
-    bisnis_unit = raw_kode.apply(lambda x: x[4:] if len(x) > 4 else 'BU LAINNYA')
-    
+    # KUNCI PERBAIKAN: Mengambil data tepat sesuai kolom di Google Sheet Anda
+    # Kolom A(0), B(1), C(2), D(3), E(4), F(5), G(6)
     df_clean = pd.DataFrame({
         'TANGGAL': df.iloc[:, 0].astype(str),
-        'BISNIS UNIT': bisnis_unit,
         'FRA': df.iloc[:, 1].astype(str).str.upper().str.strip(),
-        'KODE STORE': kode_toko_bersih,
+        'KODE STORE': df.iloc[:, 3].astype(str).str.upper().str.strip(),
         'NAMA STORE': df.iloc[:, 4].astype(str).str.upper().str.strip(),
-        'DETAIL TEMUAN': df.iloc[:, 5].astype(str).str.upper().str.strip()
+        'DETAIL TEMUAN': df.iloc[:, 5].astype(str).str.upper().str.strip(),
+        'BISNIS UNIT': df.iloc[:, 6].astype(str).str.upper().str.strip() # BACA DARI KOLOM G
     })
-    return df_clean.replace(['NAN', 'NAN ', ''], None)
+    
+    df_clean = df_clean.replace(['NAN', 'NAN ', ''], None)
+    return df_clean
 
 try:
     df_mentah = load_data()
 except Exception as e:
-    st.error("Gagal membaca data dari Google Sheets.")
+    st.error("Gagal membaca data dari Google Sheets. Pastikan link dapat diakses publik.")
     st.stop()
 
 # ==========================================
@@ -77,15 +75,20 @@ df_mentah['Ada Temuan'] = df_mentah['Kategori Temuan'].notna()
 # 4. SIDEBAR - PANEL FILTER PINTAR
 # ==========================================
 st.sidebar.markdown("### 🎛️ Panel Filter Data")
+
 urutan_bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 bulan_tersedia = [b for b in urutan_bulan if b in df_mentah['Bulan'].unique()]
 tahun_tersedia = sorted(df_mentah[df_mentah['Tahun'] != 'Unknown']['Tahun'].unique(), reverse=True)
-list_bu = sorted([b for b in df_mentah['BISNIS UNIT'].dropna().unique() if b and b not in ['BU LAINNYA', 'NONE']])
+
+# Membersihkan daftar agar tidak ada angka aneh
+list_bu = sorted([b for b in df_mentah['BISNIS UNIT'].dropna().unique() if b and b != 'NONE'])
 list_fra = sorted([f for f in df_mentah['FRA'].dropna().unique() if f and f != 'NONE'])
 
 pilih_tahun = st.sidebar.selectbox("📅 Pilih Tahun", ["Semua Tahun"] + tahun_tersedia)
 pilih_bulan = st.sidebar.selectbox("🗓️ Pilih Bulan", ["Semua Bulan"] + bulan_tersedia)
+
 st.sidebar.markdown("---")
+st.sidebar.markdown("**Filter Hirarki:**")
 pilih_bu = st.sidebar.selectbox("🏢 Filter Bisnis Unit", ["Semua Bisnis Unit"] + list_bu)
 pilih_fra = st.sidebar.selectbox("🧑‍💼 Filter Area (FRA)", ["Semua Area"] + list_fra)
 
@@ -101,6 +104,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
+# Terapkan Filter
 df_filter = df_mentah.copy()
 if pilih_tahun != "Semua Tahun": df_filter = df_filter[df_filter['Tahun'] == pilih_tahun]
 if pilih_bulan != "Semua Bulan": df_filter = df_filter[df_filter['Bulan'] == pilih_bulan]
@@ -114,7 +118,7 @@ toko_kritis = df_temuan['NAMA STORE'].nunique()
 rasio_temuan = (total_temuan / total_visit * 100) if total_visit > 0 else 0
 
 # ==========================================
-# 5. HEADER & KPI METRICS (NO "BERMASALAH")
+# 5. HEADER & KPI METRICS
 # ==========================================
 st.markdown("<h2 style='color:#0f172a; font-weight:800; margin-bottom:0px;'>📈 Executive Dashboard: Visit Operations</h2>", unsafe_allow_html=True)
 st.markdown("<p style='color:#64748b; margin-bottom:25px;'>Analisa mendalam temuan operasional lapangan untuk mendukung keputusan strategis.</p>", unsafe_allow_html=True)
@@ -137,9 +141,9 @@ st.markdown(f'''
             <div class="metric-sub">Toko unik yang memiliki temuan</div>
         </div>
         <div class="metric-box {'alert' if rasio_temuan > 30 else 'success'}">
-            <div class="metric-title">Defect Rate (Rasio Isu)</div>
+            <div class="metric-title">Defect Rate (Rasio Masalah)</div>
             <div class="metric-value">{rasio_temuan:.1f}%</div>
-            <div class="metric-sub">Tingkat temuan dari total visit</div>
+            <div class="metric-sub">Tingkat kecacatan dari total visit</div>
         </div>
     </div>
 ''', unsafe_allow_html=True)
@@ -149,10 +153,13 @@ if total_temuan == 0:
     st.stop()
 
 # ==========================================
-# 6. TAB NAVIGASI ANALISA (KEMBALI KE VERSI MANTAP)
+# 6. TAB NAVIGASI ANALISA
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["📊 Ringkasan Eksekutif", "🎯 Analisa Mendalam (BU, Area & Toko)", "💡 Kesimpulan & Action Plan"])
 
+# ------------------------------------------
+# TAB 1: RINGKASAN EKSEKUTIF
+# ------------------------------------------
 with tab1:
     col_chart1, col_chart2 = st.columns([6, 4])
     
@@ -161,10 +168,19 @@ with tab1:
         top_kategori = df_temuan['Kategori Temuan'].value_counts().reset_index()
         top_kategori.columns = ['Kategori', 'Jumlah']
         top_kategori['Persentase'] = (top_kategori['Jumlah'] / total_temuan * 100).round(1)
+        
         top_kategori['Label Teks'] = top_kategori['Jumlah'].astype(str) + " kasus (" + top_kategori['Persentase'].astype(str) + "%)"
         top_kategori = top_kategori.sort_values('Jumlah', ascending=True)
         
-        fig_bar = px.bar(top_kategori, x='Persentase', y='Kategori', orientation='h', text='Label Teks', color_discrete_sequence=['#2563eb'])
+        fig_bar = px.bar(
+            top_kategori, 
+            x='Persentase', 
+            y='Kategori', 
+            orientation='h',
+            text='Label Teks',
+            color_discrete_sequence=['#2563eb']
+        )
+        
         fig_bar.update_traces(textposition='outside')
         fig_bar.update_layout(xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(showgrid=True, gridcolor='#f1f5f9', range=[0, top_kategori['Persentase'].max() * 1.3]), margin=dict(l=0, r=0, t=10, b=0), height=380)
         st.plotly_chart(fig_bar, use_container_width=True)
@@ -177,10 +193,15 @@ with tab1:
         fig_donut.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=380, showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5))
         st.plotly_chart(fig_donut, use_container_width=True)
 
+# ------------------------------------------
+# TAB 2: ANALISA MENDALAM (BU, FRA, TOKO)
+# ------------------------------------------
 with tab2:
-    st.markdown("#### 🚨 Rapor Beban Temuan Berdasarkan Bisnis Unit")
+    st.markdown("#### 🚨 Rapor Beban Temuan Berdasarkan Bisnis Unit (BU)")
+    
     bu_counts = df_temuan['BISNIS UNIT'].value_counts().reset_index()
     bu_counts.columns = ['Bisnis Unit', 'Total Temuan']
+    
     fig_bu = px.bar(bu_counts, x='Bisnis Unit', y='Total Temuan', text='Total Temuan', color='Total Temuan', color_continuous_scale='Blues')
     fig_bu.update_traces(textposition='outside')
     fig_bu.update_layout(xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', showlegend=False, coloraxis_showscale=False, height=300)
@@ -193,6 +214,7 @@ with tab2:
         st.markdown("#### 🚨 Kinerja Area (Top FRA Kritis)")
         fra_counts = df_temuan['FRA'].value_counts().reset_index().head(10)
         fra_counts.columns = ['Nama FRA', 'Total Temuan']
+        
         fig_fra = px.bar(fra_counts, x='Nama FRA', y='Total Temuan', text='Total Temuan', color='Total Temuan', color_continuous_scale='Reds')
         fig_fra.update_traces(textposition='outside')
         fig_fra.update_layout(xaxis_title="", yaxis_title="", plot_bgcolor='rgba(0,0,0,0)', showlegend=False, coloraxis_showscale=False, height=350)
@@ -203,22 +225,20 @@ with tab2:
         store_counts = df_temuan.groupby(['BISNIS UNIT', 'KODE STORE', 'NAMA STORE']).size().reset_index(name='Jumlah Temuan')
         store_counts = store_counts.sort_values(['Jumlah Temuan', 'BISNIS UNIT'], ascending=[False, True]).head(10)
         
-        # Format Tabel Profesional
         st.dataframe(
             store_counts,
             column_config={
-                "BISNIS UNIT": st.column_config.TextColumn("BU"),
-                "KODE STORE": st.column_config.TextColumn("Kode"),
-                "NAMA STORE": st.column_config.TextColumn("Nama Toko"),
-                "Jumlah Temuan": st.column_config.ProgressColumn("Frekuensi", format="%d", min_value=0, max_value=int(store_counts['Jumlah Temuan'].max()))
+                "BISNIS UNIT": st.column_config.TextColumn("BU", width="small"),
+                "KODE STORE": st.column_config.TextColumn("Kode", width="small"),
+                "NAMA STORE": st.column_config.TextColumn("Nama Toko", width="medium"),
+                "Jumlah Temuan": st.column_config.ProgressColumn("Frekuensi", format="%f", min_value=0, max_value=int(store_counts['Jumlah Temuan'].max()))
             },
             hide_index=True, use_container_width=True
         )
 
-# Siapkan data untuk Tab 3
-df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
-df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
-
+# ------------------------------------------
+# TAB 3: KESIMPULAN & ACTION PLAN (AI BASE)
+# ------------------------------------------
 with tab3:
     st.markdown("#### 💡 Intelijen Bisnis: Insight & Rekomendasi Tindakan")
     
@@ -231,69 +251,66 @@ with tab3:
     st.markdown(f'''
         <div class="rekomendasi-box">
             <strong style="font-size:16px;">🔍 Kesimpulan Eksekutif:</strong><br>
-            Berdasarkan data {teks_fokus}, tingkat isu operasional (Defect Rate) berada di angka <b>{rasio_temuan:.1f}%</b>. 
-            Tantangan paling dominan saat ini adalah <b>{top_masalah}</b>, menyumbang <b>{persen_masalah}%</b> dari seluruh total temuan. 
-            Secara geografis/area, FRA atas nama <b>{top_fra}</b> mencatatkan rekor temuan terbanyak yang memerlukan atensi pembinaan khusus.
+            Berdasarkan data {teks_fokus}, tingkat kecacatan operasional (Defect Rate) berada di angka <b>{rasio_temuan:.1f}%</b>. 
+            Masalah paling dominan yang merusak kinerja saat ini adalah <b>{top_masalah}</b>, menyumbang <b>{persen_masalah}%</b> dari seluruh total temuan. 
+            Secara geografis/area, FRA atas nama <b>{top_fra}</b> mencatatkan rekor kelalaian terbanyak yang memerlukan atensi pembinaan khusus.
         </div>
     ''', unsafe_allow_html=True)
     
     st.markdown("**📝 Rekomendasi Tindakan Perbaikan (Corrective Action):**")
     
     if "SELISIH UANG" in top_masalah:
-        st.warning("1. **Sidak Cash Opname:** Lakukan perhitungan fisik uang dadakan (cash opname) mingguan pada shift kasir.\n2. **Training SOP Serah Terima:** Wajibkan kasir melakukan check-balance setiap pergantian shift dan disetujui oleh Kepala Toko.\n3. **Cek Sistem CCTV:** Pastikan CCTV menyorot jelas ke arah laci kasir di toko-toko kritis.")
+        st.warning("1. **Sidak Cash Opname:** Lakukan perhitungan fisik uang dadakan mingguan pada shift kasir. \n2. **Training SOP:** Wajibkan kasir melakukan check-balance setiap pergantian shift. \n3. **Cek Sistem CCTV:** Pastikan CCTV menyorot jelas ke arah laci kasir.")
     elif "STB" in top_masalah:
-        st.info("1. **Disiplin Setoran:** Buat SLA ketat bahwa Setoran Tunai Bank (STB) harus dilakukan h+1, dilarang menunda.\n2. **Verifikasi Bukti:** Area Manager (FRA) harus memvalidasi foto resi bank harian via grup WhatsApp operasional.\n3. **Sanksi Keterlambatan:** Terapkan surat teguran bagi Kepala Toko yang menahan setoran.")
+        st.info("1. **Disiplin Setoran:** Buat SLA ketat bahwa Setoran Tunai Bank (STB) harus dilakukan h+1. \n2. **Verifikasi Bukti:** Area Manager (FRA) harus memvalidasi foto resi bank harian. \n3. **Sanksi Keterlambatan:** Terapkan surat teguran bagi Toko yang menahan setoran.")
     elif "BRANKAS" in top_masalah:
-        st.error("1. **Reset Password Berkala:** Wajibkan penggantian PIN brankas setiap kali ada mutasi/resign karyawan pemegang kunci.\n2. **Pembatasan Akses:** Kunci brankas fisik hanya boleh dipegang oleh Kepala Toko / PIC Shift yang bertugas.\n3. **Audit Kepatuhan:** Berikan penalti berat jika ditemukan kombinasi brankas dalam keadaan 'pass/nyangkut' atau sengaja terbuka.")
-    elif "NOTA" in top_masalah:
-        st.info("1. **Filing System:** Wajibkan setiap toko memiliki bantex/map khusus berdasarkan tanggal untuk nota & bon.\n2. **Digitalisasi:** Jika memungkinkan, biasakan foto nota menggunakan HP kantor dan upload ke sistem sebelum nota fisik hilang.\n3. **Audit Berkas:** FRA harus mengecek kelengkapan bon setiap kunjungan rutin.")
-    elif "KASBON" in top_masalah:
-        st.error("1. **Stop Kasbon:** Tegaskan kembali aturan perusahaan bahwa uang toko TIDAK BOLEH digunakan untuk pinjaman/kasbon pribadi karyawan.\n2. **Potong Gaji:** Lakukan pemotongan gaji langsung bagi karyawan yang terbukti melakukan kasbon gantung.\n3. **Teguran FRA:** Berikan peringatan kepada FRA yang membiarkan budaya kasbon terjadi di areanya.")
+        st.error("1. **Reset Password:** Wajibkan penggantian PIN brankas setiap kali ada mutasi/resign karyawan. \n2. **Pembatasan Akses:** Kunci brankas fisik hanya boleh dipegang oleh Kepala Toko. \n3. **Audit Kepatuhan:** Berikan penalti berat jika kombinasi brankas dalam keadaan sengaja terbuka.")
     else:
-        st.success("1. **Refreshment Training:** Kumpulkan Kepala Toko yang memiliki temuan via Zoom untuk evaluasi kesalahan operasional.\n2. **Checklist Kunjungan:** Update form visit FRA agar lebih fokus mengecek poin-poin krusial yang sering dilanggar.\n3. **Reward & Punishment:** Terapkan pemotongan KPI/Bonus bagi toko dengan temuan terbanyak, dan berikan reward bagi toko yang Zero Defect.")
+        st.success("1. **Refreshment Training:** Kumpulkan Kepala Toko bermasalah untuk evaluasi kesalahan. \n2. **Checklist Kunjungan:** Update form visit FRA agar lebih fokus mengecek poin krusial. \n3. **Reward & Punishment:** Terapkan pemotongan KPI bagi toko dengan temuan terbanyak.")
 
     st.markdown("---")
-    st.markdown("#### 📂 Arsip Detail Temuan")
+    st.markdown("#### 📂 Arsip Detail Temuan (Diurutkan berdasarkan BU)")
+    
+    df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
+    df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
+    
     st.dataframe(df_tampil, hide_index=True, use_container_width=True)
 
 # ==========================================
-# 7. ASISTEN AI EXECUTIVE (VERSI ANTI-ERROR)
+# 7. ASISTEN AI EXECUTIVE 
 # ==========================================
 st.markdown("---")
 st.markdown("#### 🤖 Asisten AI Executive (Tanya Jawab Data)")
-st.caption("Ketik pertanyaan Anda (misal: 'Ringkas temuan apa saja yang paling banyak terjadi pada Bisnis Unit FBI!').")
+st.caption("Ketik pertanyaan Anda tentang data di atas. AI akan merangkumnya untuk Anda.")
 
 if "GROQ_API_KEY" in st.secrets:
     try:
         from langchain_groq import ChatGroq
         from langchain_core.messages import HumanMessage, SystemMessage
         
-        # Menggunakan model LLaMA 3 8B yang sangat ringan, cepat, dan anti-error
+        # Model LLaMA 3 - Cepat dan Stabil
         llm = ChatGroq(
             groq_api_key=st.secrets["GROQ_API_KEY"], 
             model_name="llama3-8b-8192", 
             temperature=0.1
         )
         
-        # Batasi data yang dibaca AI agar tidak terlalu berat
-        data_ringkas = df_tampil.head(30).to_markdown(index=False)
+        # Ambil 50 data teratas untuk dianalisa AI
+        data_ringkas = df_tampil.head(50).to_markdown(index=False)
         
-        pertanyaan = st.chat_input("Tanyakan sesuatu tentang data di atas...")
+        pertanyaan = st.chat_input("Contoh: Toko mana yang paling parah masalah brankasnya?")
         
         if pertanyaan:
             with st.chat_message("user"):
                 st.write(pertanyaan)
             
             with st.chat_message("assistant"):
-                with st.spinner('AI sedang membaca data dan menyusun jawaban...'):
+                with st.spinner('AI sedang membaca data...'):
                     
                     system_prompt = (
-                        "Anda adalah seorang Asisten AI Eksekutif korporat. "
-                        "Berikut adalah sebagian data laporan temuan operasional toko:\n\n"
+                        "Anda adalah Asisten AI Eksekutif. Berikut adalah data temuan operasional toko:\n\n"
                         f"{data_ringkas}\n\n"
-                        "Tugas Anda adalah menjawab pertanyaan berdasarkan data tabel di atas. "
-                        "DILARANG KERAS menggunakan kata 'bermasalah', gunakan istilah 'toko kritis' atau 'toko dengan temuan'. "
-                        "Jawablah dengan ringkas dan wajib menggunakan Bahasa Indonesia yang profesional."
+                        "Jawab pertanyaan berdasarkan data di atas. Jawablah menggunakan Bahasa Indonesia yang profesional. Jangan gunakan kata 'bermasalah', gunakan 'toko kritis' atau 'ada temuan'."
                     )
                     
                     messages = [
@@ -305,6 +322,6 @@ if "GROQ_API_KEY" in st.secrets:
                     st.write(response.content)
                     
     except Exception as e:
-        st.error(f"Sistem AI mengalami kendala teknis: Pastikan koneksi internet stabil.")
+        st.error(f"Sistem AI terkendala: {e}")
 else:
     st.warning("⚠️ Kunci GROQ_API_KEY belum dipasang di menu Settings > Secrets Streamlit.")
