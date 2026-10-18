@@ -1,6 +1,8 @@
 streamlit
 pandas
 plotly
-pandasai
+langchain
+langchain-community
 langchain-groq
-astor
+langchain-experimental
+tabulate
