@@ -298,16 +298,16 @@ if "GROQ_API_KEY" in st.secrets:
         from langchain_groq import ChatGroq
         from langchain_core.messages import HumanMessage, SystemMessage
         
-        # Menggunakan model Groq aktif versi stabil terbaru (Llama 3.3 70B)
+        # Menggunakan model Groq aktif versi stabil terbaru (GPT-OSS 20B)
         llm = ChatGroq(
             groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="llama-3.3-70b-versatile", 
+            model_name="openai/gpt-oss-20b", 
             temperature=0.1
         )
         
-        # Mengambil data keseluruhan atau spesifik agar AI bisa membandingkan bulan September & Oktober
-        data_ringkas = df_tampil.to_markdown(index=False)
-        pertanyaan = st.chat_input("Ketik pertanyaan Anda di sini (Contoh: Bandingkan temuan September dan Oktober 2026)...")
+        # Mengirimkan seluruh data bersih ke AI agar bisa mencocokkan bulan September & Oktober
+        data_ringkas = df_mentah.to_markdown(index=False)
+        pertanyaan = st.chat_input("Ketik pertanyaan Anda di sini (Contoh: Apakah ada temuan yang sama pada September dan Oktober 2026?)...")
         
         if pertanyaan:
             with st.chat_message("user"):
@@ -318,10 +318,10 @@ if "GROQ_API_KEY" in st.secrets:
                     
                     system_prompt = (
                         "Anda adalah AI Asisten untuk M Khadafi yang mengelola data analisa operasional toko. "
-                        "Berikut adalah data lengkap temuan operasional:\n\n"
+                        "Berikut adalah data lengkap seluruh temuan operasional:\n\n"
                         f"{data_ringkas}\n\n"
                         "Tugas Anda: Jawab pertanyaan analitik berdasarkan data tabel tersebut secara cermat. "
-                        "Jika pengguna meminta perbandingan antar bulan (misalnya September vs Oktober 2026), teliti kolom tanggal pada tabel dan uraikan perbandingannya secara tepat. \n"
+                        "Jika pengguna menanyakan perbandingan bulan (seperti September dan Oktober 2026), teliti kolom TANGGAL dan DETAIL TEMUAN untuk mencocokkan apakah ada toko atau kasus temuan yang berulang/sama.\n"
                         "ATURAN MUTLAK:\n"
                         "1. DILARANG menggunakan kata 'bermasalah', 'kritis', atau 'perlu atensi'. \n"
                         "2. Gunakan istilah objektif seperti 'toko dengan temuan', 'frekuensi temuan', atau 'analisa data'. \n"
