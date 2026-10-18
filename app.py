@@ -179,7 +179,6 @@ with tab2:
         store_counts = store_counts.sort_values(['Jumlah Temuan', 'BISNIS UNIT'], ascending=[False, True]).head(10)
         st.dataframe(store_counts, hide_index=True, use_container_width=True)
 
-# Membuat Variabel df_tampil agar bisa dibaca oleh AI
 df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
 df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
 
@@ -188,33 +187,27 @@ with tab3:
     st.dataframe(df_tampil, hide_index=True, use_container_width=True)
 
 # ==========================================
-# 7. ASISTEN AI (Bicara dengan Data via LANGCHAIN & GROQ)
+# 7. ASISTEN AI EXECUTIVE (DIRECT LLM / STABLE)
 # ==========================================
 st.markdown("---")
 st.markdown("#### 🤖 Asisten AI Executive (Tanya Jawab Data)")
-st.caption("Ketik pertanyaan Anda (misal: 'Sebutkan 3 toko yang paling parah masalah brankasnya!').")
+st.caption("Ketik pertanyaan Anda (misal: 'Ringkas temuan apa saja yang paling banyak terjadi pada Bisnis Unit ini!').")
 
 if "GROQ_API_KEY" in st.secrets:
     try:
         from langchain_groq import ChatGroq
-        from langchain_experimental.agents import create_pandas_dataframe_agent
+        from langchain_core.messages import HumanMessage, SystemMessage
         
-        # 1. Menghubungkan ke Otak Groq Model Terbaru Aktif
+        # Inisialisasi Model Groq
         llm = ChatGroq(
             groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="openai/gpt-oss-120b", 
-            temperature=0
+            model_name="llama-3.3-70b-versatile", 
+            temperature=0.1
         )
         
-        # 2. Membuat Agen Pembaca Data
-        agen_data = create_pandas_dataframe_agent(
-            llm, 
-            df_tampil, 
-            verbose=False, 
-            allow_dangerous_code=True
-        )
+        # Ubah tabel data yang terfilter menjadi teks ringkas (Markdown) agar bisa dibaca AI
+        data_ringkas = df_tampil.head(50).to_markdown(index=False)
         
-        # 3. Membuat Kotak Chat
         pertanyaan = st.chat_input("Tanyakan sesuatu tentang data di atas...")
         
         if pertanyaan:
@@ -222,19 +215,25 @@ if "GROQ_API_KEY" in st.secrets:
                 st.write(pertanyaan)
             
             with st.chat_message("assistant"):
-                with st.spinner('AI sedang membaca tabel Anda secara mendalam...'):
-                    # Trik Bahasa Indonesia
-                    instruksi_rahasia = pertanyaan + " (Jawablah wajib dalam Bahasa Indonesia yang baik, sopan, dan jelas. Hanya gunakan data dari dataframe yang diberikan)."
+                with st.spinner('AI sedang membaca data dan menyusun jawaban...'):
                     
-                    # Meminta AI menjawab
-                    respon = agen_data.invoke(instruksi_rahasia)
+                    system_prompt = (
+                        "Anda adalah seorang Asisten AI Eksekutif yang cerdas dan profesional. "
+                        "Berikut adalah data laporan temuan operasional toko dalam bentuk tabel:\n\n"
+                        f"{data_ringkas}\n\n"
+                        "Tugas Anda adalah menjawab pertanyaan dari pimpinan berdasarkan tabel data di atas. "
+                        "Jawablah dengan ringkas, akurat, dan wajib menggunakan Bahasa Indonesia yang baik dan profesional."
+                    )
                     
-                    # Menampilkan hasil
-                    if "output" in respon:
-                        st.write(respon["output"])
-                    else:
-                        st.write("Maaf, AI tidak menemukan kesimpulan yang cocok dari pertanyaan Anda.")
-    
+                    messages = [
+                        SystemMessage(content=system_prompt),
+                        HumanMessage(content=pertanyaan)
+                    ]
+                    
+                    # Panggil LLM secara langsung tanpa agent/tool
+                    response = llm.invoke(messages)
+                    st.write(response.content)
+                    
     except Exception as e:
         st.error(f"Sistem AI mengalami kendala teknis: {e}")
 else:
