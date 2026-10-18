@@ -85,7 +85,6 @@ st.sidebar.markdown("---")
 pilih_bu = st.sidebar.selectbox("🏢 Filter Bisnis Unit", ["Semua Bisnis Unit"] + list_bu)
 pilih_fra = st.sidebar.selectbox("🧑‍💼 Filter Area (FRA)", ["Semua Area"] + list_fra)
 
-# IDENTITAS PEMBUAT (CREDIT)
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     """
@@ -180,30 +179,38 @@ with tab2:
         store_counts = store_counts.sort_values(['Jumlah Temuan', 'BISNIS UNIT'], ascending=[False, True]).head(10)
         st.dataframe(store_counts, hide_index=True, use_container_width=True)
 
+# Membuat Variabel df_tampil agar bisa dibaca oleh AI
+df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
+df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
+
 with tab3:
     st.markdown("#### 📂 Arsip Detail Temuan")
-    df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
-    df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
     st.dataframe(df_tampil, hide_index=True, use_container_width=True)
 
 # ==========================================
-# 7. ASISTEN AI (Bicara dengan Data via GROQ)
+# 7. ASISTEN AI (Bicara dengan Data via LANGCHAIN & GROQ)
 # ==========================================
 st.markdown("---")
 st.markdown("#### 🤖 Asisten AI Executive (Tanya Jawab Data)")
-st.caption("Ketik pertanyaan Anda (misal: 'Toko mana yang selisih uangnya paling banyak?'). AI akan membaca tabel di atas dan merangkumnya untuk Anda.")
-
-from pandasai import SmartDataframe
-from langchain_groq import ChatGroq
+st.caption("Ketik pertanyaan Anda (misal: 'Sebutkan 3 toko yang paling parah masalah brankasnya!').")
 
 if "GROQ_API_KEY" in st.secrets:
     try:
-        kunci_groq = st.secrets["GROQ_API_KEY"]
-        llm_groq = ChatGroq(groq_api_key=kunci_groq, model_name="llama3-70b-8192")
+        from langchain_groq import ChatGroq
+        from langchain_experimental.agents import create_pandas_dataframe_agent
         
-        # Masukkan df_tampil (data tabel yang rapi) ke dalam otak AI
-        df_pintar = SmartDataframe(df_tampil, config={"llm": llm_groq})
+        # 1. Menghubungkan ke Otak Groq (Llama-3) dengan Suhu 0 agar fokus pada data murni
+        llm = ChatGroq(groq_api_key=st.secrets["GROQ_API_KEY"], model_name="llama3-70b-8192", temperature=0)
         
+        # 2. Membuat Agen Pembaca Data (LangChain Agent)
+        agen_data = create_pandas_dataframe_agent(
+            llm, 
+            df_tampil, 
+            verbose=False, 
+            allow_dangerous_code=True # Wajib diaktifkan untuk server Streamlit
+        )
+        
+        # 3. Membuat Kotak Chat
         pertanyaan = st.chat_input("Tanyakan sesuatu tentang data di atas...")
         
         if pertanyaan:
@@ -211,13 +218,20 @@ if "GROQ_API_KEY" in st.secrets:
                 st.write(pertanyaan)
             
             with st.chat_message("assistant"):
-                with st.spinner('AI sedang membaca dan menganalisa tabel...'):
-                    # Trik instruksi rahasia Bahasa Indonesia
-                    pertanyaan_rahasia = pertanyaan + " (Jawablah secara singkat dan jelas wajib menggunakan Bahasa Indonesia yang baik dan profesional berdasarkan data tersebut. Jangan bahas kolom yang tidak relevan)."
+                with st.spinner('AI sedang membaca tabel Anda secara mendalam...'):
+                    # Trik Bahasa Indonesia
+                    instruksi_rahasia = pertanyaan + " (Jawablah wajib dalam Bahasa Indonesia yang baik, sopan, dan jelas. Hanya gunakan data dari dataframe yang diberikan)."
                     
-                    jawaban = df_pintar.chat(pertanyaan_rahasia)
-                    st.write(jawaban)
+                    # Meminta AI menjawab
+                    respon = agen_data.invoke(instruksi_rahasia)
+                    
+                    # Menampilkan hasil
+                    if "output" in respon:
+                        st.write(respon["output"])
+                    else:
+                        st.write("Maaf, AI tidak menemukan kesimpulan yang cocok dari pertanyaan Anda.")
+    
     except Exception as e:
-        st.error(f"Sistem AI belum siap: {e}")
+        st.error(f"Sistem AI mengalami kendala teknis: {e}")
 else:
-    st.warning("⚠️ GROQ_API_KEY belum dipasang di menu Settings > Secrets Streamlit. Fitur AI sedang dimatikan.")
+    st.warning("⚠️ Kunci GROQ_API_KEY belum dipasang di menu Settings > Secrets Streamlit.")
