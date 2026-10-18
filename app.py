@@ -299,10 +299,10 @@ if "GROQ_API_KEY" in st.secrets:
         from langchain_groq import ChatGroq
         from langchain_core.messages import HumanMessage, SystemMessage
         
-        # Diperbarui menggunakan model Groq terbaru yang aktif
+        # Diperbarui menggunakan model Groq aktif stabil (GPT-OSS 20B)
         llm = ChatGroq(
             groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="llama-3.1-8b-instant", 
+            model_name="openai/gpt-oss-20b", 
             temperature=0.1
         )
         
