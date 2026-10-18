@@ -198,10 +198,10 @@ if "GROQ_API_KEY" in st.secrets:
         from langchain_groq import ChatGroq
         from langchain_core.messages import HumanMessage, SystemMessage
         
-        # Inisialisasi Model Groq
+        # Menggunakan model open-weight terbaru yang stabil dari Groq
         llm = ChatGroq(
             groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="llama-3.3-70b-versatile", 
+            model_name="openai/gpt-oss-120b", 
             temperature=0.1
         )
         
@@ -230,7 +230,6 @@ if "GROQ_API_KEY" in st.secrets:
                         HumanMessage(content=pertanyaan)
                     ]
                     
-                    # Panggil LLM secara langsung tanpa agent/tool
                     response = llm.invoke(messages)
                     st.write(response.content)
                     
