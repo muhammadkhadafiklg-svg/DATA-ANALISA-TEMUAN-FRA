@@ -21,16 +21,17 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 # ==========================================
-# 2. PENGAMBILAN DATA (BACA KOLOM G UNTUK BU)
+# 2. PENGAMBILAN DATA (KOLOM G UNTUK BU)
 # ==========================================
 SHEET_ID = "1RfrC_LUAZbKrGEN15KPkBXhUz8ei2jyqGdUaKPS4WMY"
 url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
-@st.cache_data(ttl=300)
-def load_data():
+# TTL diubah menjadi 10 detik dan nama fungsi diganti agar Cache lama hancur
+@st.cache_data(ttl=10)
+def tarik_data_segar():
     df = pd.read_csv(url)
     
-    # KUNCI PERBAIKAN: Mengambil data tepat sesuai kolom di Google Sheet Anda
+    # Membaca data langsung dari kolom yang benar
     # Kolom A(0), B(1), C(2), D(3), E(4), F(5), G(6)
     df_clean = pd.DataFrame({
         'TANGGAL': df.iloc[:, 0].astype(str),
@@ -38,14 +39,14 @@ def load_data():
         'KODE STORE': df.iloc[:, 3].astype(str).str.upper().str.strip(),
         'NAMA STORE': df.iloc[:, 4].astype(str).str.upper().str.strip(),
         'DETAIL TEMUAN': df.iloc[:, 5].astype(str).str.upper().str.strip(),
-        'BISNIS UNIT': df.iloc[:, 6].astype(str).str.upper().str.strip() # BACA DARI KOLOM G
+        'BISNIS UNIT': df.iloc[:, 6].astype(str).str.upper().str.strip() # BACA MURNI DARI KOLOM G
     })
     
     df_clean = df_clean.replace(['NAN', 'NAN ', ''], None)
     return df_clean
 
 try:
-    df_mentah = load_data()
+    df_mentah = tarik_data_segar()
 except Exception as e:
     st.error("Gagal membaca data dari Google Sheets. Pastikan link dapat diakses publik.")
     st.stop()
@@ -80,7 +81,7 @@ urutan_bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", 
 bulan_tersedia = [b for b in urutan_bulan if b in df_mentah['Bulan'].unique()]
 tahun_tersedia = sorted(df_mentah[df_mentah['Tahun'] != 'Unknown']['Tahun'].unique(), reverse=True)
 
-# Membersihkan daftar agar tidak ada angka aneh
+# Membersihkan daftar agar tidak ada angka aneh / kosong
 list_bu = sorted([b for b in df_mentah['BISNIS UNIT'].dropna().unique() if b and b != 'NONE'])
 list_fra = sorted([f for f in df_mentah['FRA'].dropna().unique() if f and f != 'NONE'])
 
@@ -141,9 +142,9 @@ st.markdown(f'''
             <div class="metric-sub">Toko unik yang memiliki temuan</div>
         </div>
         <div class="metric-box {'alert' if rasio_temuan > 30 else 'success'}">
-            <div class="metric-title">Defect Rate (Rasio Masalah)</div>
+            <div class="metric-title">Defect Rate (Rasio Isu)</div>
             <div class="metric-value">{rasio_temuan:.1f}%</div>
-            <div class="metric-sub">Tingkat kecacatan dari total visit</div>
+            <div class="metric-sub">Tingkat temuan dari total visit</div>
         </div>
     </div>
 ''', unsafe_allow_html=True)
@@ -237,7 +238,7 @@ with tab2:
         )
 
 # ------------------------------------------
-# TAB 3: KESIMPULAN & ACTION PLAN (AI BASE)
+# TAB 3: KESIMPULAN & ACTION PLAN 
 # ------------------------------------------
 with tab3:
     st.markdown("#### 💡 Intelijen Bisnis: Insight & Rekomendasi Tindakan")
@@ -251,77 +252,56 @@ with tab3:
     st.markdown(f'''
         <div class="rekomendasi-box">
             <strong style="font-size:16px;">🔍 Kesimpulan Eksekutif:</strong><br>
-            Berdasarkan data {teks_fokus}, tingkat kecacatan operasional (Defect Rate) berada di angka <b>{rasio_temuan:.1f}%</b>. 
-            Masalah paling dominan yang merusak kinerja saat ini adalah <b>{top_masalah}</b>, menyumbang <b>{persen_masalah}%</b> dari seluruh total temuan. 
-            Secara geografis/area, FRA atas nama <b>{top_fra}</b> mencatatkan rekor kelalaian terbanyak yang memerlukan atensi pembinaan khusus.
+            Berdasarkan data {teks_fokus}, tingkat isu operasional (Defect Rate) berada di angka <b>{rasio_temuan:.1f}%</b>. 
+            Isu paling dominan yang merusak kinerja saat ini adalah <b>{top_masalah}</b>, menyumbang <b>{persen_masalah}%</b> dari seluruh total temuan. 
+            Secara geografis/area, FRA atas nama <b>{top_fra}</b> mencatatkan rekor temuan terbanyak yang memerlukan atensi pembinaan khusus.
         </div>
     ''', unsafe_allow_html=True)
     
     st.markdown("**📝 Rekomendasi Tindakan Perbaikan (Corrective Action):**")
     
     if "SELISIH UANG" in top_masalah:
-        st.warning("1. **Sidak Cash Opname:** Lakukan perhitungan fisik uang dadakan mingguan pada shift kasir. \n2. **Training SOP:** Wajibkan kasir melakukan check-balance setiap pergantian shift. \n3. **Cek Sistem CCTV:** Pastikan CCTV menyorot jelas ke arah laci kasir.")
+        st.warning(
+            "1. **Sidak Cash Opname:** Lakukan perhitungan fisik uang dadakan (cash opname) mingguan pada shift kasir.\n"
+            "2. **Training SOP Serah Terima:** Wajibkan kasir melakukan check-balance setiap pergantian shift dan disetujui oleh Kepala Toko.\n"
+            "3. **Cek Sistem CCTV:** Pastikan CCTV menyorot jelas ke arah laci kasir di toko-toko kritis."
+        )
     elif "STB" in top_masalah:
-        st.info("1. **Disiplin Setoran:** Buat SLA ketat bahwa Setoran Tunai Bank (STB) harus dilakukan h+1. \n2. **Verifikasi Bukti:** Area Manager (FRA) harus memvalidasi foto resi bank harian. \n3. **Sanksi Keterlambatan:** Terapkan surat teguran bagi Toko yang menahan setoran.")
+        st.info(
+            "1. **Disiplin Setoran:** Buat SLA ketat bahwa Setoran Tunai Bank (STB) harus dilakukan h+1, dilarang menunda.\n"
+            "2. **Verifikasi Bukti:** Area Manager (FRA) harus memvalidasi foto resi bank harian via grup WhatsApp operasional.\n"
+            "3. **Sanksi Keterlambatan:** Terapkan surat teguran bagi Kepala Toko yang menahan setoran."
+        )
     elif "BRANKAS" in top_masalah:
-        st.error("1. **Reset Password:** Wajibkan penggantian PIN brankas setiap kali ada mutasi/resign karyawan. \n2. **Pembatasan Akses:** Kunci brankas fisik hanya boleh dipegang oleh Kepala Toko. \n3. **Audit Kepatuhan:** Berikan penalti berat jika kombinasi brankas dalam keadaan sengaja terbuka.")
+        st.error(
+            "1. **Reset Password Berkala:** Wajibkan penggantian PIN brankas setiap kali ada mutasi/resign karyawan pemegang kunci.\n"
+            "2. **Pembatasan Akses:** Kunci brankas fisik hanya boleh dipegang oleh Kepala Toko / PIC Shift yang bertugas.\n"
+            "3. **Audit Kepatuhan:** Berikan penalti berat jika ditemukan kombinasi brankas dalam keadaan 'pass/nyangkut' atau sengaja terbuka."
+        )
+    elif "NOTA" in top_masalah:
+        st.info(
+            "1. **Filing System:** Wajibkan setiap toko memiliki bantex/map khusus berdasarkan tanggal untuk nota & bon.\n"
+            "2. **Digitalisasi:** Jika memungkinkan, biasakan foto nota menggunakan HP kantor dan upload ke sistem sebelum nota fisik hilang.\n"
+            "3. **Audit Berkas:** FRA harus mengecek kelengkapan bon setiap kunjungan rutin."
+        )
+    elif "KASBON" in top_masalah:
+        st.error(
+            "1. **Stop Kasbon:** Tegaskan kembali aturan perusahaan bahwa uang toko TIDAK BOLEH digunakan untuk pinjaman/kasbon pribadi karyawan.\n"
+            "2. **Potong Gaji:** Lakukan pemotongan gaji langsung bagi karyawan yang terbukti melakukan kasbon gantung.\n"
+            "3. **Teguran FRA:** Berikan peringatan kepada FRA yang membiarkan budaya kasbon terjadi di areanya."
+        )
     else:
-        st.success("1. **Refreshment Training:** Kumpulkan Kepala Toko bermasalah untuk evaluasi kesalahan. \n2. **Checklist Kunjungan:** Update form visit FRA agar lebih fokus mengecek poin krusial. \n3. **Reward & Punishment:** Terapkan pemotongan KPI bagi toko dengan temuan terbanyak.")
+        st.success(
+            "1. **Refreshment Training:** Kumpulkan Kepala Toko bermasalah via Zoom untuk evaluasi kesalahan operasional.\n"
+            "2. **Checklist Kunjungan:** Update form visit FRA agar lebih fokus mengecek poin-poin krusial yang sering dilanggar.\n"
+            "3. **Reward & Punishment:** Terapkan pemotongan KPI/Bonus bagi toko dengan temuan terbanyak, dan berikan reward bagi toko yang Zero Defect."
+        )
 
     st.markdown("---")
     st.markdown("#### 📂 Arsip Detail Temuan (Diurutkan berdasarkan BU)")
     
+    # Sortir tabel agar rapi berdasarkan BU, FRA, dan Kode
     df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
     df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
     
     st.dataframe(df_tampil, hide_index=True, use_container_width=True)
-
-# ==========================================
-# 7. ASISTEN AI EXECUTIVE 
-# ==========================================
-st.markdown("---")
-st.markdown("#### 🤖 Asisten AI Executive (Tanya Jawab Data)")
-st.caption("Ketik pertanyaan Anda tentang data di atas. AI akan merangkumnya untuk Anda.")
-
-if "GROQ_API_KEY" in st.secrets:
-    try:
-        from langchain_groq import ChatGroq
-        from langchain_core.messages import HumanMessage, SystemMessage
-        
-        # Model LLaMA 3 - Cepat dan Stabil
-        llm = ChatGroq(
-            groq_api_key=st.secrets["GROQ_API_KEY"], 
-            model_name="llama3-8b-8192", 
-            temperature=0.1
-        )
-        
-        # Ambil 50 data teratas untuk dianalisa AI
-        data_ringkas = df_tampil.head(50).to_markdown(index=False)
-        
-        pertanyaan = st.chat_input("Contoh: Toko mana yang paling parah masalah brankasnya?")
-        
-        if pertanyaan:
-            with st.chat_message("user"):
-                st.write(pertanyaan)
-            
-            with st.chat_message("assistant"):
-                with st.spinner('AI sedang membaca data...'):
-                    
-                    system_prompt = (
-                        "Anda adalah Asisten AI Eksekutif. Berikut adalah data temuan operasional toko:\n\n"
-                        f"{data_ringkas}\n\n"
-                        "Jawab pertanyaan berdasarkan data di atas. Jawablah menggunakan Bahasa Indonesia yang profesional. Jangan gunakan kata 'bermasalah', gunakan 'toko kritis' atau 'ada temuan'."
-                    )
-                    
-                    messages = [
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=pertanyaan)
-                    ]
-                    
-                    response = llm.invoke(messages)
-                    st.write(response.content)
-                    
-    except Exception as e:
-        st.error(f"Sistem AI terkendala: {e}")
-else:
-    st.warning("⚠️ Kunci GROQ_API_KEY belum dipasang di menu Settings > Secrets Streamlit.")
