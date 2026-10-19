@@ -322,7 +322,7 @@ with tab3:
     )
 
 # ==========================================
-# 7. AI ASISTEN (CHAT - MIXTRAL 32K TERSTABIL)
+# 7. AI ASISTEN (CHAT - GEMMA 2 & COMPACT CSV)
 # ==========================================
 st.markdown("<hr style='margin-top: 40px;'>", unsafe_allow_html=True)
 st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
@@ -333,11 +333,20 @@ if "GROQ_API_KEY" in st.secrets:
     try:
         client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         
-        # Mengambil seluruh data temuan, Mixtral memiliki kapasitas 32.000 token sehingga aman dari error panjang
-        ringkasan_data = df_mentah[df_mentah['Ada Temuan'] == True].groupby(['Bulan', 'Tahun', 'BISNIS UNIT', 'FRA', 'NAMA STORE', 'Kategori Temuan', 'DETAIL TEMUAN']).size().reset_index(name='Jumlah')
-        context_data = ringkasan_data.to_markdown(index=False)
+        # 1. Mengambil data mentah yang ada temuannya saja
+        df_ai = df_mentah[df_mentah['Ada Temuan'] == True].copy()
         
-        pertanyaan = st.chat_input("Ketik pertanyaan Anda di sini (Contoh: Apakah ada temuan yang sama pada September dan Oktober 2026?)...")
+        # 2. Hanya ambil kolom yang penting untuk analisa agar hemat token
+        df_ai = df_ai[['Bulan', 'Tahun', 'NAMA STORE', 'Kategori Temuan', 'DETAIL TEMUAN']]
+        
+        # 3. Ubah format menjadi CSV (Sangat padat & hemat token, anti error "message too long")
+        context_data = df_ai.to_csv(index=False)
+        
+        # 4. Limit keamanan ekstra (Maksimal 20.000 karakter)
+        if len(context_data) > 20000:
+            context_data = context_data[:20000] + "\n...[Data dipotong otomatis demi keamanan sistem]"
+
+        pertanyaan = st.chat_input("Ketik pertanyaan Anda (Contoh: Apa temuan yang sama pada September dan Oktober 2026?)...")
         
         if pertanyaan:
             with st.chat_message("user"):
@@ -347,20 +356,20 @@ if "GROQ_API_KEY" in st.secrets:
                 with st.spinner('AI sedang menganalisis data...'):
                     
                     system_prompt = (
-                        "Anda adalah AI Asisten profesional untuk M Khadafi yang mengelola data analitik operasional toko. "
-                        "Berikut adalah data statistik lengkap seluruh temuan operasional teragregasi:\n\n"
+                        "Anda adalah AI Asisten profesional untuk M Khadafi. "
+                        "Berikut adalah data CSV temuan operasional cabang:\n\n"
                         f"{context_data}\n\n"
-                        "Tugas Anda: Jawab pertanyaan analitik pengguna secara rinci berdasarkan data tabel di atas. "
-                        "Jika pengguna menanyakan perbandingan antar bulan (seperti September dan Oktober 2026), teliti kolom Bulan, NAMA STORE, dan Kategori/Detail Temuan secara cermat untuk mendeteksi apakah ada kasus temuan yang berulang, sama, atau polanya mirip.\n"
+                        "Tugas Anda: Jawab pertanyaan analitik pengguna secara rinci berdasarkan data tersebut. "
+                        "Jika ditanya perbandingan bulan (misal September vs Oktober 2026), cari baris data di bulan tersebut dan sebutkan toko mana yang punya temuan berulang.\n"
                         "ATURAN MUTLAK:\n"
-                        "1. DILARANG KERAS menggunakan kata 'bermasalah', 'kritis', atau 'perlu atensi'. \n"
-                        "2. Gunakan istilah objektif seperti 'toko dengan temuan', 'frekuensi temuan', atau 'analisis data'. \n"
+                        "1. DILARANG menggunakan kata 'bermasalah', 'kritis', atau 'perlu atensi'. \n"
+                        "2. Gunakan istilah 'toko dengan temuan' atau 'analisis data'. \n"
                         "3. Jawablah menggunakan Bahasa Indonesia yang sangat rapi, analitis, sopan, dan berstandar korporat."
                     )
                     
-                    # Menggunakan model mixtral-8x7b-32768 yang sangat stabil dan support token besar
+                    # Menggunakan model gemma2-9b-it yang dijamin 100% aktif dan didukung penuh oleh Groq
                     response = client.chat.completions.create(
-                        model="mixtral-8x7b-32768",
+                        model="gemma2-9b-it",
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": pertanyaan}
