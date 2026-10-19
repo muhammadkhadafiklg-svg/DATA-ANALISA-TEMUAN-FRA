@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown('''
+st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     
@@ -77,7 +77,7 @@ st.markdown('''
     
     hr { border-color: #cbd5e1; margin: 2rem 0; }
     </style>
-''', unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # ==========================================
 # 2. PENGAMBILAN DATA
@@ -178,14 +178,213 @@ rasio_temuan = (total_temuan / total_visit * 100) if total_visit > 0 else 0
 # ==========================================
 # 5. HEADER & KPI 
 # ==========================================
-st.markdown('''
+st.markdown("""
     <div class="main-header">
         <h2 style='color:#020617; font-weight:800; font-size:26px; margin:0 0 6px 0;'>Dashboard Analisa Temuan Visit Store</h2>
         <p style='color:#475569; font-size:15px; font-weight:500; margin:0;'>Laporan analitik komprehensif data temuan operasional lapangan berdasarkan visit cabang.</p>
     </div>
-''', unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-st.markdown(f'''
+# Perbaikan Syntax Error pada f-string (Menggunakan triple double quotes dan logic di luar string)
+kpi_status = "alert" if rasio_temuan > 30 else "success"
+
+kpi_html = f"""
     <div class="kpi-container">
         <div class="kpi-card">
-            <div class="kpi
+            <div class="kpi-label">Total Visit</div>
+            <div class="kpi-value">{total_visit}</div>
+            <div class="kpi-desc">Total kunjungan audit</div>
+        </div>
+        <div class="kpi-card alert">
+            <div class="kpi-label">Volume Temuan</div>
+            <div class="kpi-value">{total_temuan}</div>
+            <div class="kpi-desc">Total rincian isu tercatat</div>
+        </div>
+        <div class="kpi-card alert">
+            <div class="kpi-label">Toko dengan Temuan</div>
+            <div class="kpi-value">{toko_dengan_temuan}</div>
+            <div class="kpi-desc">Cabang unik dengan catatan temuan</div>
+        </div>
+        <div class="kpi-card {kpi_status}">
+            <div class="kpi-label">Rasio Temuan (Defect Rate)</div>
+            <div class="kpi-value">{rasio_temuan:.1f}%</div>
+            <div class="kpi-desc">Persentase temuan terhadap visit</div>
+        </div>
+    </div>
+"""
+st.markdown(kpi_html, unsafe_allow_html=True)
+
+if total_temuan == 0:
+    st.success("Informasi: Berdasarkan filter yang Anda pilih, tidak ditemukan data anomali atau temuan operasional.")
+    st.stop()
+
+# ==========================================
+# 6. ANALYTICS TABS 
+# ==========================================
+tab1, tab2, tab3 = st.tabs(["📊 Analisa Kategori", "🏢 Analisa Area & Toko", "📋 Arsip & Rekomendasi"])
+
+with tab1:
+    col_chart1, col_chart2 = st.columns([6, 4])
+    with col_chart1:
+        st.markdown("<h4 style='color:#0f172a; font-weight:700; font-size:16px;'>Distribusi Kategori Temuan Operasional</h4>", unsafe_allow_html=True)
+        top_kategori = df_temuan['Kategori Temuan'].value_counts().reset_index()
+        top_kategori.columns = ['Kategori', 'Jumlah']
+        top_kategori['Persentase'] = (top_kategori['Jumlah'] / total_temuan * 100).round(1)
+        top_kategori['Label'] = top_kategori['Jumlah'].astype(str) + " kasus (" + top_kategori['Persentase'].astype(str) + "%)"
+        top_kategori = top_kategori.sort_values('Jumlah', ascending=True)
+        
+        fig_bar = px.bar(top_kategori, x='Persentase', y='Kategori', orientation='h', text='Label')
+        fig_bar.update_traces(marker_color='#1E3A8A', textposition='outside', textfont=dict(color='#0f172a', size=12, weight='bold'))
+        fig_bar.update_layout(plot_bgcolor='#ffffff', paper_bgcolor='#ffffff', xaxis_title="", yaxis_title="", xaxis=dict(showgrid=True, gridcolor='#e2e8f0', range=[0, top_kategori['Persentase'].max() * 1.3]), margin=dict(l=0, r=0, t=10, b=0), height=380)
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_chart2:
+        st.markdown("<h4 style='color:#0f172a; font-weight:700; font-size:16px;'>Proporsi Kepatuhan Audit Visit</h4>", unsafe_allow_html=True)
+        kunjungan_bersih = total_visit - total_temuan if (total_visit - total_temuan) > 0 else 0
+        fig_donut = px.pie(names=['Toko Tanpa Temuan', 'Terdapat Temuan'], values=[kunjungan_bersih, total_temuan], hole=0.65)
+        fig_donut.update_traces(marker=dict(colors=['#10B981', '#E11D48']), textinfo='percent', textfont_size=14, hoverinfo='label+value')
+        fig_donut.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=380, showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5))
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+with tab2:
+    col_deep1, col_deep2 = st.columns(2)
+    
+    with col_deep1:
+        st.markdown("<h4 style='color:#0f172a; font-weight:700; font-size:16px;'>Frekuensi Temuan Berdasarkan Area (FRA)</h4>", unsafe_allow_html=True)
+        fra_counts = df_temuan['FRA'].value_counts().reset_index().head(10)
+        fra_counts.columns = ['Nama FRA', 'Total Temuan']
+        
+        fig_fra = px.bar(fra_counts, x='Nama FRA', y='Total Temuan', text='Total Temuan')
+        fig_fra.update_traces(marker_color='#1E3A8A', textposition='outside', textfont=dict(size=13, color='#0f172a', weight='bold'))
+        fig_fra.update_layout(plot_bgcolor='#ffffff', paper_bgcolor='#ffffff', xaxis_title="", yaxis_title="", margin=dict(t=10, b=0), height=400)
+        st.plotly_chart(fig_fra, use_container_width=True)
+
+    with col_deep2:
+        st.markdown("<h4 style='color:#0f172a; font-weight:700; font-size:16px;'>Daftar Cabang dengan Temuan Terbanyak</h4>", unsafe_allow_html=True)
+        store_counts = df_temuan.groupby(['BISNIS UNIT', 'KODE STORE', 'NAMA STORE']).size().reset_index(name='Frekuensi Temuan')
+        store_counts = store_counts.sort_values(['Frekuensi Temuan', 'BISNIS UNIT'], ascending=[False, True]).head(10)
+        
+        st.dataframe(
+            store_counts,
+            column_config={
+                "BISNIS UNIT": st.column_config.TextColumn("BU", width="small"),
+                "KODE STORE": st.column_config.TextColumn("Kode", width="small"),
+                "NAMA STORE": st.column_config.TextColumn("Nama Cabang", width="medium"),
+                "Frekuensi Temuan": st.column_config.ProgressColumn("Total Data", format="%d", min_value=0, max_value=int(store_counts['Frekuensi Temuan'].max()))
+            },
+            hide_index=True, use_container_width=True, height=400
+        )
+
+df_tampil = df_temuan[['BISNIS UNIT', 'FRA', 'KODE STORE', 'NAMA STORE', 'TANGGAL', 'DETAIL TEMUAN', 'Kategori Temuan']]
+df_tampil = df_tampil.sort_values(by=['BISNIS UNIT', 'FRA', 'KODE STORE'])
+
+with tab3:
+    st.markdown("<h4 style='color:#0f172a; font-weight:700; font-size:16px;'>Analisis & Rekomendasi Tindakan</h4>", unsafe_allow_html=True)
+    
+    top_masalah = top_kategori.iloc[-1]['Kategori']
+    persen_masalah = top_kategori.iloc[-1]['Persentase']
+    top_fra = fra_counts.iloc[0]['Nama FRA'] if not fra_counts.empty else "N/A"
+    
+    rekomendasi_html = f"""
+        <div class="rekomendasi-box">
+            <b>Kesimpulan Analisis:</b> Berdasarkan filter saat ini, rasio temuan tercatat pada angka <b>{rasio_temuan:.1f}%</b>. 
+            Kategori <b>{top_masalah}</b> mendominasi dengan kontribusi sebesar <b>{persen_masalah}%</b> dari total seluruh kasus yang tercatat.<br><br>
+            Wilayah pengawasan di bawah area <b>{top_fra}</b> mencatatkan volume temuan tertinggi yang dapat dijadikan fokus evaluasi operasional berkala.
+        </div>
+    """
+    st.markdown(rekomendasi_html, unsafe_allow_html=True)
+    
+    st.markdown("<h5 style='color:#0f172a; font-weight:700; font-size:15px; margin-top:15px;'>Rekomendasi Standar Operasional:</h5>", unsafe_allow_html=True)
+    
+    if "SELISIH UANG" in top_masalah:
+        st.warning("1. **Validasi Kas Fisik:** Mengagendakan proses cash opname secara acak saat pergantian shift.\n2. **Kepatuhan SOP:** Memastikan seluruh form serah terima kas ditandatangani sesuai prosedur.\n3. **Audit Fasilitas:** Mengevaluasi sudut pandang kamera pengawas (CCTV) di area laci kasir.")
+    elif "STB" in top_masalah:
+        st.info("1. **Disiplin Setoran:** Menetapkan tenggat waktu (SLA) setoran bank (STB) selambatnya H+1.\n2. **Verifikasi Resi:** Mewajibkan pelaporan bukti setoran harian pada grup koordinasi area.\n3. **Evaluasi Berkala:** Memberikan atensi khusus pada cabang yang sering mengalami penundaan setoran.")
+    elif "BRANKAS" in top_masalah:
+        st.error("1. **Protokol Kombinasi:** Melakukan perubahan PIN brankas secara berkala atau ketika terjadi mutasi personel.\n2. **Pembatasan Akses:** Memastikan kunci dan akses brankas hanya dipegang oleh Person in Charge (PIC) berwenang.\n3. **Kepatuhan Fisik:** Memeriksa secara ketat agar pintu brankas tidak dibiarkan terbuka/tidak terkunci.")
+    elif "NOTA" in top_masalah:
+        st.info("1. **Sistem Pengarsipan:** Menyediakan map/binder khusus berindeks tanggal di setiap unit toko.\n2. **Digitalisasi Dokumen:** Mengunggah foto bon/nota transaksi ke sistem sebelum berkas fisik dikirimkan.\n3. **Pemeriksaan Rutin:** Menjadikan kelengkapan berkas administrasi sebagai item utama saat kunjungan audit.")
+    elif "KASBON" in top_masalah:
+        st.error("1. **Penegasan Kebijakan:** Mensosialisasikan kembali aturan larangan penggunaan dana operasional toko untuk kepentingan pribadi.\n2. **Koordinasi Finansial:** Bekerja ulang dengan departemen terkait untuk penyelesaian status kasbon menggantung.\n3. **Monitoring Petty Cash:** Mengawasi pergerakan kas kecil harian secara ketat di setiap cabang.")
+    else:
+        st.success("1. **Program Penyegaran (Refreshment):** Mengadakan sesi penyegaran SOP operasional bagi kepala toko.\n2. **Fokus Lembar Kerja Audit:** Menyesuaikan poin checklist visit lapangan dengan tren temuan terbaru.\n3. **Korelasi Kinerja:** Menyelaraskan catatan kepatuhan operasional dengan penilaian kinerja berkala.")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color:#0f172a; font-weight:700; font-size:16px;'>Tabel Arsip Data Temuan Operasional</h4>", unsafe_allow_html=True)
+    
+    st.dataframe(
+        df_tampil,
+        column_config={
+            "BISNIS UNIT": st.column_config.TextColumn("BU", width="small"),
+            "FRA": st.column_config.TextColumn("Nama FRA", width="small"),
+            "KODE STORE": st.column_config.TextColumn("Kode", width="small"),
+            "NAMA STORE": st.column_config.TextColumn("Nama Cabang", width="medium"),
+            "TANGGAL": st.column_config.TextColumn("Tanggal Audit"),
+            "DETAIL TEMUAN": st.column_config.TextColumn("Deskripsi Detail", width="large"),
+            "Kategori Temuan": st.column_config.TextColumn("Klasifikasi Sistem")
+        },
+        hide_index=True, use_container_width=True
+    )
+
+# ==========================================
+# 7. AI ASISTEN (CHAT - QWEN TERBARU & CSV PADAT)
+# ==========================================
+st.markdown("<hr style='margin-top: 40px;'>", unsafe_allow_html=True)
+st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+st.markdown("<h3 style='color:#020617; font-weight:800; font-size:20px; margin-bottom:5px;'>🤖 AI Asisten</h3>", unsafe_allow_html=True)
+st.caption("Saya adalah asisten M Khadafi dan siap menjawab pertanyaan tentang data yang ditampilkan.")
+
+if "GROQ_API_KEY" in st.secrets:
+    try:
+        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+        
+        # 1. Mengambil seluruh data mentah yang ada temuannya saja
+        df_ai = df_mentah[df_mentah['Ada Temuan'] == True].copy()
+        
+        # 2. Hanya ambil kolom yang krusial untuk perbandingan bulan & toko
+        df_ai = df_ai[['Bulan', 'Tahun', 'NAMA STORE', 'Kategori Temuan', 'DETAIL TEMUAN']]
+        
+        # 3. Ubah format menjadi CSV. Format ini sangat padat, dijamin aman dari masalah "message length"
+        context_data = df_ai.to_csv(index=False)
+        
+        pertanyaan = st.chat_input("Ketik pertanyaan Anda (Contoh: Apa temuan yang sama pada September dan Oktober 2026?)...")
+        
+        if pertanyaan:
+            with st.chat_message("user"):
+                st.write(pertanyaan)
+            
+            with st.chat_message("assistant"):
+                with st.spinner('AI sedang menganalisis seluruh data (Kapasitas 131K Token)...'):
+                    
+                    system_prompt = f"""
+Anda adalah AI Asisten profesional untuk M Khadafi.
+Berikut adalah data CSV lengkap seluruh temuan operasional cabang dari bulan ke bulan:
+
+{context_data}
+
+Tugas Anda: Jawab pertanyaan analitik secara cermat dan akurat berdasarkan data tersebut. Jika pengguna meminta perbandingan antar bulan (misal September vs Oktober 2026), periksa kolom Bulan dan NAMA STORE. Cari toko mana yang namanya muncul di kedua bulan tersebut dengan masalah/Kategori Temuan yang mirip atau sama persis, dan jelaskan hasilnya.
+ATURAN MUTLAK:
+1. DILARANG KERAS menggunakan kata 'bermasalah', 'kritis', atau 'perlu atensi'.
+2. Gunakan istilah objektif 'toko dengan temuan', 'temuan berulang', atau 'analisis operasional'.
+3. Jawablah menggunakan Bahasa Indonesia yang sangat rapi, analitis, sopan, dan berstandar korporat.
+"""
+                    
+                    # Menggunakan model terbaru qwen3.8-27b (Support hingga 131K Token & 100% Aktif sesuai doc yang Bapak kirim)
+                    response = client.chat.completions.create(
+                        model="qwen/qwen3.8-27b",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": pertanyaan}
+                        ],
+                        temperature=0.1
+                    )
+                    
+                    answer = response.choices[0].message.content
+                    st.write(answer)
+                    
+    except Exception as e:
+        st.error(f"Koneksi AI mengalami kendala teknis: {e}")
+else:
+    st.warning("⚠️ Kunci GROQ_API_KEY belum dikonfigurasi di menu Settings > Secrets Streamlit.")
+
+st.markdown("</div>", unsafe_allow_html=True)
