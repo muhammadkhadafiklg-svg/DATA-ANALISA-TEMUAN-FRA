@@ -322,7 +322,7 @@ with tab3:
     )
 
 # ==========================================
-# 7. AI ASISTEN (CHAT - NATIVE GROQ & FULL CONTEXT)
+# 7. AI ASISTEN (CHAT - MIXTRAL 32K TERSTABIL)
 # ==========================================
 st.markdown("<hr style='margin-top: 40px;'>", unsafe_allow_html=True)
 st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
@@ -331,10 +331,9 @@ st.caption("Saya adalah asisten M Khadafi dan siap menjawab pertanyaan tentang d
 
 if "GROQ_API_KEY" in st.secrets:
     try:
-        # Menggunakan SDK asli Groq untuk kestabilan 100% dan respons cepat
         client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         
-        # Membuat agregasi data lengkap per bulan agar AI dapat membandingkan (misal: September dan Oktober 2026) dengan akurat
+        # Mengambil seluruh data temuan, Mixtral memiliki kapasitas 32.000 token sehingga aman dari error panjang
         ringkasan_data = df_mentah[df_mentah['Ada Temuan'] == True].groupby(['Bulan', 'Tahun', 'BISNIS UNIT', 'FRA', 'NAMA STORE', 'Kategori Temuan', 'DETAIL TEMUAN']).size().reset_index(name='Jumlah')
         context_data = ringkasan_data.to_markdown(index=False)
         
@@ -359,8 +358,9 @@ if "GROQ_API_KEY" in st.secrets:
                         "3. Jawablah menggunakan Bahasa Indonesia yang sangat rapi, analitis, sopan, dan berstandar korporat."
                     )
                     
+                    # Menggunakan model mixtral-8x7b-32768 yang sangat stabil dan support token besar
                     response = client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
+                        model="mixtral-8x7b-32768",
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": pertanyaan}
